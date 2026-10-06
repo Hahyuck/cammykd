@@ -22,6 +22,7 @@ jobs:
           cat payload/chunk_00 payload/chunk_01 payload/chunk_02 > pocketframe.b64
           base64 -d pocketframe.b64 > pocketframe.zip
           unzip -q pocketframe.zip
+          sed -i 's/setImmersive(/applyImmersive(/g' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
           test -f PocketFrame/settings.gradle
           grep -q "versionName '0.2.0'" PocketFrame/app/build.gradle
           grep -q 'screenOrientation="fullUser"' PocketFrame/app/src/main/AndroidManifest.xml
@@ -58,7 +59,6 @@ jobs:
           cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-26             -DBUILD_QT=OFF             -DBUILD_SDL=OFF             -DBUILD_LIBRETRO=ON             -DDISABLE_DEPS=ON             -DSKIP_LIBRARY=ON
           cmake --build "$BUILD" --target mgba_libretro --parallel
           cp "$BUILD/mgba_libretro.so" "$OUT/libmgba_libretro.so"
-          file "$OUT/libmgba_libretro.so"
 
       - name: Build debug APK
         working-directory: PocketFrame
