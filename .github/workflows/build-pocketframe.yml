@@ -27,6 +27,7 @@ jobs:
       - name: Apply PocketFrame v0.3 code patch
         shell: bash
         run: |
+          sed -i 's/setImmersive(/applyImmersive(/g' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
           base64 -d payload/v03_patch.b64 | gzip -d > v03.patch
           patch -d PocketFrame -p2 < v03.patch
           grep -q "versionName '0.3.0'" PocketFrame/app/build.gradle
