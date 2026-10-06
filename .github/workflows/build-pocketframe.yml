@@ -39,7 +39,6 @@ jobs:
         shell: bash
         run: |
           SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
-          echo "Using sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
 
@@ -47,10 +46,17 @@ jobs:
         shell: bash
         working-directory: PocketFrame
         run: |
-          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
-          chmod +x scripts/fetch_mgba.sh scripts/build_mgba_android.sh
+          chmod +x scripts/fetch_mgba.sh
           scripts/fetch_mgba.sh
-          scripts/build_mgba_android.sh
+          NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          BUILD="$PWD/build/mgba-arm64-v8a"
+          OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
+          rm -rf "$BUILD"
+          mkdir -p "$BUILD" "$OUT"
+          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-26             -DBUILD_QT=OFF             -DBUILD_SDL=OFF             -DBUILD_LIBRETRO=ON             -DDISABLE_DEPS=ON             -DSKIP_LIBRARY=ON
+          cmake --build "$BUILD" --target mgba_libretro --parallel
+          cp "$BUILD/mgba_libretro.so" "$OUT/libmgba_libretro.so"
+          file "$OUT/libmgba_libretro.so"
 
       - name: Build debug APK
         working-directory: PocketFrame
