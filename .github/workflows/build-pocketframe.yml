@@ -1,4 +1,4 @@
-name: Build GBA PocketFrame 0.5.0 RC3 APK
+name: Build GBA PocketFrame 0.5.0 RC4 APK
 
 on:
   push:
@@ -26,14 +26,16 @@ jobs:
           rm -f GBA-PocketFrame-1.0.0/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp.b64
           test -f GBA-PocketFrame-1.0.0/settings.gradle
           test -f GBA-PocketFrame-1.0.0/app/build.gradle
+          base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
+          patch -p0 < rc4.patch
 
-      - name: RC3 UI checks
+      - name: RC4 UI and control checks
         shell: bash
         run: |
           ROOT="GBA-PocketFrame-1.0.0"
           MAIN="$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
           SURFACE="$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
-          grep -q "versionName '0.5.0-rc3'" "$ROOT/app/build.gradle"
+          grep -q "versionName '0.5.0-rc4'" "$ROOT/app/build.gradle"
           grep -q '<string name="app_name">GBA PocketFrame</string>' "$ROOT/app/src/main/res/values/strings.xml"
           grep -q 'setMenuListener(this::showGameMenu)' "$MAIN"
           grep -q '"MENU"' "$SURFACE"
@@ -47,6 +49,13 @@ jobs:
           grep -q 'EXIT APP' "$MAIN"
           grep -q 'QUICK SAVE' "$MAIN"
           grep -q 'QUICK LOAD' "$MAIN"
+          grep -q 'CONTROL LAYOUT' "$MAIN"
+          grep -q 'SAVE CUSTOM PRESET' "$MAIN"
+          grep -q 'LOAD PRESET' "$MAIN"
+          grep -q 'showControlAdjustDialog' "$MAIN"
+          grep -q 'POPUP_BG' "$MAIN"
+          grep -q 'popupDivider' "$MAIN"
+          grep -q 'Math.round(controlsDrawAlpha \* 0.90f)' "$SURFACE"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -104,7 +113,7 @@ jobs:
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmgba_libretro.so'
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.5.0-rc3'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.5.0-rc4'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
           if "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump permissions "$APK" | grep -q 'android.permission.INTERNET'; then
             echo "Unexpected INTERNET permission" >&2
@@ -115,6 +124,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GBA-PocketFrame-0.5.0-rc3-debug-apk
+          name: GBA-PocketFrame-0.5.0-rc4-debug-apk
           path: GBA-PocketFrame-1.0.0/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
