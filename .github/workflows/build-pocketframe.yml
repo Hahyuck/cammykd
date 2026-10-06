@@ -1,0 +1,62 @@
+name: Build PocketFrame APK
+
+on:
+  push:
+    branches:
+      - pocketframe-build
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+
+      - name: Reconstruct PocketFrame source
+        shell: bash
+        run: |
+          cat payload/chunk_00 payload/chunk_01 payload/chunk_02 payload/chunk_03 payload/chunk_04 payload/chunk_05 > pocketframe.b64
+          base64 -d pocketframe.b64 > pocketframe.zip
+          unzip -q pocketframe.zip
+          test -f PocketFrame/settings.gradle
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle 9.6
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
+
+      - name: Build mGBA core
+        shell: bash
+        working-directory: PocketFrame
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
+          chmod +x scripts/fetch_mgba.sh scripts/build_mgba_android.sh
+          scripts/fetch_mgba.sh
+          scripts/build_mgba_android.sh
+
+      - name: Build debug APK
+        working-directory: PocketFrame
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketFrame-v0.1-debug-apk
+          path: PocketFrame/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
