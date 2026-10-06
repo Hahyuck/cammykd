@@ -70,10 +70,30 @@ jobs:
               'subtitle.setText("A clean GB · GBC · GBA player for your own games.\\nNo ads. No accounts. No tracking.\\nGames and ROM files are not included.");'
           )
 
-          needle = '''        welcomeCard.addView(start, startLp);\n\n        root.addView(welcomeCard);'''
-          insert = '''        welcomeCard.addView(start, startLp);\n\n        TextView privacy = capsule("PRIVACY", Color.rgb(34, 39, 47), TEXT, true);\n        privacy.setTextSize(11);\n        privacy.setOnClickListener(v -> showPrivacyPolicy());\n        LinearLayout.LayoutParams privacyLp = new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));\n        privacyLp.topMargin = dp(10);\n        welcomeCard.addView(privacy, privacyLp);\n\n        root.addView(welcomeCard);'''
+          needle = '''        welcomeCard.addView(start, startLp);
+
+        root.addView(welcomeCard);'''
+          insert = '''        welcomeCard.addView(start, startLp);
+
+        TextView privacy = capsule("PRIVACY", Color.rgb(34, 39, 47), TEXT, true);
+        privacy.setTextSize(11);
+        privacy.setOnClickListener(v -> showPrivacyPolicy());
+        LinearLayout.LayoutParams privacyLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
+        privacyLp.topMargin = dp(10);
+        welcomeCard.addView(privacy, privacyLp);
+
+        TextView licenses = capsule("OPEN SOURCE LICENSES", Color.rgb(34, 39, 47), TEXT, true);
+        licenses.setTextSize(11);
+        licenses.setOnClickListener(v -> showOpenSourceLicenses());
+        LinearLayout.LayoutParams licensesLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
+        licensesLp.topMargin = dp(8);
+        welcomeCard.addView(licenses, licensesLp);
+
+        root.addView(welcomeCard);'''
           if needle not in s:
-              raise SystemExit("privacy button insertion point not found")
+              raise SystemExit("welcome card insertion point not found")
           s = s.replace(needle, insert)
 
           needle2 = '''    private TextView capsule(String text, int background, int foreground, boolean bold) {'''
@@ -98,89 +118,50 @@ jobs:
                 .show();
     }
 
-    private void showPrivacyPolicy() {\n        final String policy =\n                "GBA PocketFrame Privacy Policy\\n\\n" +\n                "GBA PocketFrame does not collect, transmit, sell, or share personal data. " +\n                "The app has no account system, advertising SDK, analytics SDK, or network permission.\\n\\n" +\n                "ROM and archive files you choose are read locally on your device for emulation. " +\n                "Save RAM and save states are stored locally in the app's private storage. " +\n                "No game files or save data are uploaded by GBA PocketFrame.\\n\\n" +\n                "Bluetooth or USB game controller input is processed locally and is not recorded or transmitted.\\n\\n" +\n                "Games and ROM files are not included with the app. Users are responsible for using files they are legally entitled to use.\\n\\n" +\n                "Data retention: local save data remains on the device until you remove it or uninstall the app.\\n\\n" +\n                "Privacy inquiries: github.com/Hahyuck/cammykd/issues";\n\n        new AlertDialog.Builder(this)\n                .setTitle("Privacy Policy")\n                .setMessage(policy)\n                .setPositiveButton("OK", null)\n                .show();\n    }\n\n    private TextView capsule(String text, int background, int foreground, boolean bold) {'''
+    private void showPrivacyPolicy() {
+        final String policy =
+                "GBA PocketFrame Privacy Policy\\n\\n" +
+                "GBA PocketFrame does not collect, transmit, sell, or share personal data. " +
+                "The app has no account system, advertising SDK, analytics SDK, or network permission.\\n\\n" +
+                "ROM and archive files you choose are read locally on your device for emulation. " +
+                "Save RAM and save states are stored locally in the app's private storage. " +
+                "No game files or save data are uploaded by GBA PocketFrame.\\n\\n" +
+                "Bluetooth or USB game controller input is processed locally and is not recorded or transmitted.\\n\\n" +
+                "Games and ROM files are not included with the app. Users are responsible for using files they are legally entitled to use.\\n\\n" +
+                "Data retention: local save data remains on the device until you remove it or uninstall the app.\\n\\n" +
+                "Privacy inquiries: github.com/Hahyuck/cammykd/issues";
+
+        new AlertDialog.Builder(this)
+                .setTitle("Privacy Policy")
+                .setMessage(policy)
+                .setPositiveButton("OK", null)
+                .show();
+    }
+
+    private TextView capsule(String text, int background, int foreground, boolean bold) {'''
           if needle2 not in s:
-              raise SystemExit("privacy method insertion point not found")
+              raise SystemExit("license method insertion point not found")
           s = s.replace(needle2, method)
           main.write_text(s)
           PY
 
           mkdir -p PocketFrame/app/src/main/assets
           LICENSES=PocketFrame/app/src/main/assets/open_source_licenses.txt
-          cat > "$LICENSES" <<'EOF'
-GBA PocketFrame — Open Source Licenses
-
-Frontend: MIT
-Source: https://github.com/Hahyuck/cammykd
-
-mGBA 0.10.5
-Primary license: MPL-2.0
-Exact source tag: https://github.com/mgba-emu/mgba/tree/0.10.5
-Exact commit: 26b7884bc25a5933960f3cdcd98bac1ae14d42e2
-GBA PocketFrame does not modify MPL-covered mGBA source files.
-
-mGBA third-party code relevant to this build:
-- blip-buf — LGPL-2.1-or-later
-- inih — BSD-3-Clause
-- MurmurHash3 — public domain
-- libretro API header — Expat/MIT-style license
-
-Android archive libraries:
-- Apache Commons Compress 1.28.0 — Apache-2.0
-- Apache Commons Codec 1.19.0 — Apache-2.0
-- Apache Commons IO 2.20.0 — Apache-2.0
-- Apache Commons Lang 3.18.0 — Apache-2.0
-- XZ for Java 1.10 — 0BSD
-
-Full license texts follow.
-
-===== MPL-2.0 =====
-EOF
+          printf '%s\n'             'GBA PocketFrame — Open Source Licenses'             ''             'Frontend: MIT'             'Source: https://github.com/Hahyuck/cammykd'             ''             'mGBA 0.10.5 — MPL-2.0'             'Exact source: https://github.com/mgba-emu/mgba/tree/0.10.5'             'Exact commit: 26b7884bc25a5933960f3cdcd98bac1ae14d42e2'             'MPL-covered mGBA modifications by GBA PocketFrame: none'             ''             'mGBA third-party code:'             '- blip-buf — LGPL-2.1-or-later'             '- inih — BSD-3-Clause'             '- MurmurHash3 — public domain'             '- libretro API header — Expat/MIT-style license'             ''             'Android archive libraries:'             '- Apache Commons Compress 1.28.0 — Apache-2.0'             '- Apache Commons Codec 1.19.0 — Apache-2.0'             '- Apache Commons IO 2.20.0 — Apache-2.0'             '- Apache Commons Lang 3.18.0 — Apache-2.0'             '- XZ for Java 1.10 — 0BSD'             ''             '===== MPL-2.0 =====' > "$LICENSES"
           cat /usr/share/common-licenses/MPL-2.0 >> "$LICENSES"
-          cat >> "$LICENSES" <<'EOF'
-
-===== LGPL-2.1 =====
-EOF
+          printf '\n===== LGPL-2.1 =====\n' >> "$LICENSES"
           cat /usr/share/common-licenses/LGPL-2.1 >> "$LICENSES"
-          cat >> "$LICENSES" <<'EOF'
-
-===== Apache License 2.0 =====
-EOF
+          printf '\n===== Apache License 2.0 =====\n' >> "$LICENSES"
           cat /usr/share/common-licenses/Apache-2.0 >> "$LICENSES"
-          cat >> "$LICENSES" <<'EOF'
-
-===== BSD-3-Clause — inih =====
-Copyright (c) 2009, Ben Hoyt
-All rights reserved.
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the copyright notice, conditions and disclaimer are
-retained. Neither the name of Ben Hoyt nor contributors may be used to endorse
-derived products without specific prior written permission.
-THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
-===== Expat/MIT-style — libretro API header =====
-Copyright (C) 2010-2020 The RetroArch team
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files, to deal in the Software
-without restriction, subject to inclusion of this copyright and permission
-notice. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-
-===== 0BSD — XZ for Java 1.10 =====
-Copyright (c) The XZ for Java authors and contributors
-Permission to use, copy, modify, and/or distribute this software for any purpose
-with or without fee is hereby granted.
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES.
-
-===== Public domain — MurmurHash3 =====
-MurmurHash3 was written by Austin Appleby and placed in the public domain.
-EOF
+          printf '%s\n'             ''             '===== BSD-3-Clause — inih ====='             'Copyright (c) 2009, Ben Hoyt'             'Redistribution and use in source and binary forms, with or without modification, are permitted if the copyright notice, conditions, and disclaimer are retained. Neither the name of Ben Hoyt nor contributors may be used to endorse derived products without permission. THIS SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY.'             ''             '===== Expat/MIT-style — libretro API header ====='             'Copyright (C) 2010-2020 The RetroArch team'             'Permission is granted, free of charge, to deal in the Software without restriction, subject to inclusion of the copyright and permission notice. THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY.'             ''             '===== 0BSD — XZ for Java 1.10 ====='             'Copyright (c) The XZ for Java authors and contributors'             'Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted. THE SOFTWARE IS PROVIDED AS IS AND THE AUTHOR DISCLAIMS ALL WARRANTIES.'             ''             '===== Public domain — MurmurHash3 ====='             'MurmurHash3 was written by Austin Appleby and placed in the public domain.' >> "$LICENSES"
 
           grep -q "versionCode 10" PocketFrame/app/build.gradle
           grep -q "versionName '1.0.0'" PocketFrame/app/build.gradle
           grep -q '<string name="app_name">GBA PocketFrame</string>' PocketFrame/app/src/main/res/values/strings.xml
           grep -q 'showPrivacyPolicy' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
           grep -q 'showOpenSourceLicenses' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          test -s PocketFrame/app/src/main/assets/open_source_licenses.txt
+          grep -q 'OPEN SOURCE LICENSES' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
+          test -s "$LICENSES"
 
       - name: Store candidate feature checks
         shell: bash
@@ -228,17 +209,7 @@ EOF
           OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
           rm -rf "$BUILD"
           mkdir -p "$BUILD" "$OUT"
-          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-26 \
-            -DBUILD_QT=OFF \
-            -DBUILD_SDL=OFF \
-            -DBUILD_LIBRETRO=ON \
-            -DDISABLE_DEPS=ON \
-            -DUSE_LZMA=OFF \
-            -DSKIP_LIBRARY=ON
+          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-26             -DBUILD_QT=OFF             -DBUILD_SDL=OFF             -DBUILD_LIBRETRO=ON             -DDISABLE_DEPS=ON             -DUSE_LZMA=OFF             -DSKIP_LIBRARY=ON
           cmake --build "$BUILD" --target mgba_libretro --parallel
           cp "$BUILD/mgba_libretro.so" "$OUT/libmgba_libretro.so"
 
@@ -261,6 +232,6 @@ EOF
       - name: Upload unsigned AAB
         uses: actions/upload-artifact@v4
         with:
-          name: GBA-PocketFrame-1.0.0-unsigned-aab
+          name: GBA-PocketFrame-1.0.0-license-audited-unsigned-aab
           path: PocketFrame/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
