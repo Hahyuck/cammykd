@@ -1,4 +1,4 @@
-name: Build GBA PocketFrame 1.0 Store Candidate
+name: Build GBA PocketFrame 0.5.0 RC3 APK
 
 on:
   push:
@@ -12,173 +12,40 @@ jobs:
     env:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
+
     steps:
       - name: Checkout staging branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct PocketFrame v0.2 base
+      - name: Reconstruct exact RC3 source
         shell: bash
         run: |
-          cat payload/chunk_00 payload/chunk_01 payload/chunk_02 > pocketframe.b64
-          base64 -d pocketframe.b64 > pocketframe.zip
-          unzip -q pocketframe.zip
-          test -f PocketFrame/settings.gradle
+          cat staging/rc3src_aa staging/rc3src_ab staging/rc3src_ac staging/rc3src_ad staging/rc3src_ae > rc3src.b64
+          base64 -d rc3src.b64 > rc3src.tar.gz
+          tar -xzf rc3src.tar.gz
+          test -f GBA-PocketFrame-1.0.0/settings.gradle
+          test -f GBA-PocketFrame-1.0.0/app/build.gradle
 
-      - name: Apply PocketFrame v0.3 base patch
+      - name: RC3 UI checks
         shell: bash
         run: |
-          sed -i 's/setImmersive(/applyImmersive(/g' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          base64 -d payload/v03_patch.b64 | gzip -d > v03.patch
-          patch -d PocketFrame -p2 < v03.patch
-
-      - name: Install PocketFrame icon
-        shell: bash
-        run: |
-          mkdir -p PocketFrame/app/src/main/res/mipmap-xxxhdpi
-          base64 -d payload/v03_icon.b64 > PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
-          cp PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp
-
-      - name: Apply PocketFrame v0.3.2 delta
-        shell: bash
-        run: |
-          base64 -d payload/v032_delta.b64 | gzip -d > v032.patch
-          patch -d PocketFrame -p1 < v032.patch
-
-      - name: Prepare 1.0 store candidate
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          root = Path("PocketFrame")
-
-          gradle = root / "app/build.gradle"
-          s = gradle.read_text()
-          s = s.replace("versionCode 5", "versionCode 10")
-          s = s.replace("versionName '0.3.2'", "versionName '1.0.0'")
-          gradle.write_text(s)
-
-          strings = root / "app/src/main/res/values/strings.xml"
-          s = strings.read_text().replace(">PocketFrame<", ">GBA PocketFrame<")
-          strings.write_text(s)
-
-          main = root / "app/src/main/java/com/pocketframe/app/MainActivity.java"
-          s = main.read_text()
-          s = s.replace('title.setText("PocketFrame");', 'title.setText("GBA PocketFrame");')
-          s = s.replace('statusText.setText("PocketFrame v0.3");', 'statusText.setText("GBA PocketFrame 1.0");')
-          s = s.replace(
-              'subtitle.setText("A clean GB · GBC · GBA player for your own games.\\nNo ads. No accounts. No tracking.");',
-              'subtitle.setText("A clean GB · GBC · GBA player for your own games.\\nNo ads. No accounts. No tracking.\\nGames and ROM files are not included.");'
-          )
-
-          needle = '''        welcomeCard.addView(start, startLp);
-
-        root.addView(welcomeCard);'''
-          insert = '''        welcomeCard.addView(start, startLp);
-
-        TextView privacy = capsule("PRIVACY", Color.rgb(34, 39, 47), TEXT, true);
-        privacy.setTextSize(11);
-        privacy.setOnClickListener(v -> showPrivacyPolicy());
-        LinearLayout.LayoutParams privacyLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        privacyLp.topMargin = dp(10);
-        welcomeCard.addView(privacy, privacyLp);
-
-        TextView licenses = capsule("OPEN SOURCE LICENSES", Color.rgb(34, 39, 47), TEXT, true);
-        licenses.setTextSize(11);
-        licenses.setOnClickListener(v -> showOpenSourceLicenses());
-        LinearLayout.LayoutParams licensesLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        licensesLp.topMargin = dp(8);
-        welcomeCard.addView(licenses, licensesLp);
-
-        root.addView(welcomeCard);'''
-          if needle not in s:
-              raise SystemExit("welcome card insertion point not found")
-          s = s.replace(needle, insert)
-
-          needle2 = '''    private TextView capsule(String text, int background, int foreground, boolean bold) {'''
-          method = '''    private void showOpenSourceLicenses() {
-        String text;
-        try (java.io.InputStream in = getAssets().open("open_source_licenses.txt")) {
-            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = in.read(buffer)) != -1) {
-                out.write(buffer, 0, count);
-            }
-            text = out.toString("UTF-8");
-        } catch (Exception e) {
-            text = "Open-source license information: github.com/Hahyuck/cammykd";
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle("Open Source Licenses")
-                .setMessage(text)
-                .setPositiveButton("OK", null)
-                .show();
-    }
-
-    private void showPrivacyPolicy() {
-        final String policy =
-                "GBA PocketFrame Privacy Policy\\n\\n" +
-                "GBA PocketFrame does not collect, transmit, sell, or share personal data. " +
-                "The app has no account system, advertising SDK, analytics SDK, or network permission.\\n\\n" +
-                "ROM and archive files you choose are read locally on your device for emulation. " +
-                "Save RAM and save states are stored locally in the app's private storage. " +
-                "No game files or save data are uploaded by GBA PocketFrame.\\n\\n" +
-                "Bluetooth or USB game controller input is processed locally and is not recorded or transmitted.\\n\\n" +
-                "Games and ROM files are not included with the app. Users are responsible for using files they are legally entitled to use.\\n\\n" +
-                "Data retention: local save data remains on the device until you remove it or uninstall the app.\\n\\n" +
-                "Privacy inquiries: github.com/Hahyuck/cammykd/issues";
-
-        new AlertDialog.Builder(this)
-                .setTitle("Privacy Policy")
-                .setMessage(policy)
-                .setPositiveButton("OK", null)
-                .show();
-    }
-
-    private TextView capsule(String text, int background, int foreground, boolean bold) {'''
-          if needle2 not in s:
-              raise SystemExit("license method insertion point not found")
-          s = s.replace(needle2, method)
-          main.write_text(s)
-          PY
-
-          mkdir -p PocketFrame/app/src/main/assets
-          LICENSES=PocketFrame/app/src/main/assets/open_source_licenses.txt
-          printf '%s\n'             'GBA PocketFrame — Open Source Licenses'             ''             'Frontend: MIT'             'Source: https://github.com/Hahyuck/cammykd'             ''             'mGBA 0.10.5 — MPL-2.0'             'Exact source: https://github.com/mgba-emu/mgba/tree/0.10.5'             'Exact commit: 26b7884bc25a5933960f3cdcd98bac1ae14d42e2'             'MPL-covered mGBA modifications by GBA PocketFrame: none'             ''             'mGBA third-party code:'             '- blip-buf — LGPL-2.1-or-later'             '- inih — BSD-3-Clause'             '- MurmurHash3 — public domain'             '- libretro API header — Expat/MIT-style license'             ''             'Android archive libraries:'             '- Apache Commons Compress 1.28.0 — Apache-2.0'             '- Apache Commons Codec 1.19.0 — Apache-2.0'             '- Apache Commons IO 2.20.0 — Apache-2.0'             '- Apache Commons Lang 3.18.0 — Apache-2.0'             '- XZ for Java 1.10 — 0BSD'             ''             '===== MPL-2.0 =====' > "$LICENSES"
-          cat /usr/share/common-licenses/MPL-2.0 >> "$LICENSES"
-          printf '\n===== LGPL-2.1 =====\n' >> "$LICENSES"
-          cat /usr/share/common-licenses/LGPL-2.1 >> "$LICENSES"
-          printf '\n===== Apache License 2.0 =====\n' >> "$LICENSES"
-          cat /usr/share/common-licenses/Apache-2.0 >> "$LICENSES"
-          printf '%s\n'             ''             '===== BSD-3-Clause — inih ====='             'Copyright (c) 2009, Ben Hoyt'             'Redistribution and use in source and binary forms, with or without modification, are permitted if the copyright notice, conditions, and disclaimer are retained. Neither the name of Ben Hoyt nor contributors may be used to endorse derived products without permission. THIS SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY.'             ''             '===== Expat/MIT-style — libretro API header ====='             'Copyright (C) 2010-2020 The RetroArch team'             'Permission is granted, free of charge, to deal in the Software without restriction, subject to inclusion of the copyright and permission notice. THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY.'             ''             '===== 0BSD — XZ for Java 1.10 ====='             'Copyright (c) The XZ for Java authors and contributors'             'Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted. THE SOFTWARE IS PROVIDED AS IS AND THE AUTHOR DISCLAIMS ALL WARRANTIES.'             ''             '===== Public domain — MurmurHash3 ====='             'MurmurHash3 was written by Austin Appleby and placed in the public domain.' >> "$LICENSES"
-
-          grep -q "versionCode 10" PocketFrame/app/build.gradle
-          grep -q "versionName '1.0.0'" PocketFrame/app/build.gradle
-          grep -q '<string name="app_name">GBA PocketFrame</string>' PocketFrame/app/src/main/res/values/strings.xml
-          grep -q 'showPrivacyPolicy' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          grep -q 'showOpenSourceLicenses' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          grep -q 'OPEN SOURCE LICENSES' PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          test -s "$LICENSES"
-
-      - name: Store candidate feature checks
-        shell: bash
-        run: |
-          MAIN=PocketFrame/app/src/main/java/com/pocketframe/app/MainActivity.java
-          grep -q 'lower.endsWith(".gba")' "$MAIN"
-          grep -q 'lower.endsWith(".gbc")' "$MAIN"
-          grep -q 'lower.endsWith(".gb")' "$MAIN"
-          grep -q 'lower.endsWith(".zip")' "$MAIN"
-          grep -q 'lower.endsWith(".7z")' "$MAIN"
-          grep -q 'onGenericMotionEvent' "$MAIN"
-          grep -q 'SCANLINE_LCD_GRID' PocketFrame/app/src/main/java/com/pocketframe/app/GameSurface.java
-          grep -q 'android:screenOrientation="fullUser"' PocketFrame/app/src/main/AndroidManifest.xml
-          if grep -q 'android.permission.INTERNET' PocketFrame/app/src/main/AndroidManifest.xml; then
-            echo "Unexpected INTERNET permission" >&2
+          ROOT="GBA-PocketFrame-1.0.0"
+          MAIN="$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
+          SURFACE="$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
+          grep -q "versionName '0.5.0-rc3'" "$ROOT/app/build.gradle"
+          grep -q '<string name="app_name">GBA PocketFrame</string>' "$ROOT/app/src/main/res/values/strings.xml"
+          grep -q 'setMenuListener(this::showGameMenu)' "$MAIN"
+          grep -q '"MENU"' "$SURFACE"
+          grep -q 'isMenuHit' "$SURFACE"
+          if grep -q 'pfMenuButton' "$MAIN"; then
+            echo "Legacy floating PF menu still present" >&2
             exit 1
           fi
+          grep -q 'ROM LOAD' "$MAIN"
+          grep -q 'CLOSE GAME' "$MAIN"
+          grep -q 'EXIT APP' "$MAIN"
+          grep -q 'QUICK SAVE' "$MAIN"
+          grep -q 'QUICK LOAD' "$MAIN"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -200,7 +67,7 @@ jobs:
 
       - name: Build mGBA core
         shell: bash
-        working-directory: PocketFrame
+        working-directory: GBA-PocketFrame-1.0.0
         run: |
           chmod +x scripts/fetch_mgba.sh
           scripts/fetch_mgba.sh
@@ -209,29 +76,44 @@ jobs:
           OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
           rm -rf "$BUILD"
           mkdir -p "$BUILD" "$OUT"
-          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-26             -DBUILD_QT=OFF             -DBUILD_SDL=OFF             -DBUILD_LIBRETRO=ON             -DDISABLE_DEPS=ON             -DUSE_LZMA=OFF             -DSKIP_LIBRARY=ON
+          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DBUILD_QT=OFF \
+            -DBUILD_SDL=OFF \
+            -DBUILD_LIBRETRO=ON \
+            -DDISABLE_DEPS=ON \
+            -DSKIP_LIBRARY=ON
           cmake --build "$BUILD" --target mgba_libretro --parallel
           cp "$BUILD/mgba_libretro.so" "$OUT/libmgba_libretro.so"
 
-      - name: Build release App Bundle
-        working-directory: PocketFrame
-        run: gradle :app:bundleRelease --stacktrace
+      - name: Build debug APK
+        working-directory: GBA-PocketFrame-1.0.0
+        run: gradle :app:assembleDebug --stacktrace
 
-      - name: Smoke-check App Bundle
+      - name: Smoke-check APK
         shell: bash
-        working-directory: PocketFrame
+        working-directory: GBA-PocketFrame-1.0.0
         run: |
-          AAB="app/build/outputs/bundle/release/app-release.aab"
-          test -s "$AAB"
-          unzip -t "$AAB" >/dev/null
-          unzip -l "$AAB" | grep -q 'base/lib/arm64-v8a/libmgba_libretro.so'
-          unzip -l "$AAB" | grep -q 'base/lib/arm64-v8a/libpocketframe_jni.so'
-          unzip -l "$AAB" | grep -q 'base/assets/open_source_licenses.txt'
-          sha256sum "$AAB"
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmgba_libretro.so'
+          unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.5.0-rc3'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
+          if "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump permissions "$APK" | grep -q 'android.permission.INTERNET'; then
+            echo "Unexpected INTERNET permission" >&2
+            exit 1
+          fi
+          sha256sum "$APK"
 
-      - name: Upload unsigned AAB
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GBA-PocketFrame-1.0.0-license-audited-unsigned-aab
-          path: PocketFrame/app/build/outputs/bundle/release/app-release.aab
+          name: GBA-PocketFrame-0.5.0-rc3-debug-apk
+          path: GBA-PocketFrame-1.0.0/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
