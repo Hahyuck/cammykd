@@ -24,16 +24,23 @@ jobs:
           unzip -q pocketframe.zip
           test -f PocketFrame/settings.gradle
 
-      - name: Apply PocketFrame v0.3 overlay
+      - name: Apply PocketFrame v0.3 code patch
         shell: bash
         run: |
-          base64 -d payload/v03_overlay.b64 > overlay.zip
-          unzip -oq overlay.zip -d PocketFrame
-          test -f PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
+          base64 -d payload/v03_patch.b64 | gzip -d > v03.patch
+          patch -d PocketFrame -p2 < v03.patch
           grep -q "versionName '0.3.0'" PocketFrame/app/build.gradle
-          grep -q 'android:icon="@mipmap/ic_launcher"' PocketFrame/app/src/main/AndroidManifest.xml
           grep -q 'SCANLINE_LCD_GRID' PocketFrame/app/src/main/java/com/pocketframe/app/GameSurface.java
           grep -q 'getSaveState' PocketFrame/app/src/main/cpp/native-lib.cpp
+
+      - name: Install PocketFrame icon
+        shell: bash
+        run: |
+          mkdir -p PocketFrame/app/src/main/res/mipmap-xxxhdpi
+          base64 -d payload/v03_icon.b64 > PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
+          cp PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp
+          test -s PocketFrame/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp
+          grep -q 'android:icon="@mipmap/ic_launcher"' PocketFrame/app/src/main/AndroidManifest.xml
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
