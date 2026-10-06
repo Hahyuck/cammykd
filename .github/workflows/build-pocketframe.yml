@@ -1,4 +1,4 @@
-name: Build PocketFrame v0.4.0 RC1 APK
+name: Build GBA PocketFrame v0.4.0 RC2 APK
 
 on:
   push:
@@ -57,10 +57,16 @@ jobs:
       - name: Freeze release-candidate version
         shell: bash
         run: |
-          sed -i "s/versionCode 5/versionCode 6/" PocketFrame/app/build.gradle
-          sed -i "s/versionName '0.3.2'/versionName '0.4.0-rc1'/" PocketFrame/app/build.gradle
-          grep -q "versionCode 6" PocketFrame/app/build.gradle
-          grep -q "versionName '0.4.0-rc1'" PocketFrame/app/build.gradle
+          sed -i "s/versionCode 5/versionCode 7/" PocketFrame/app/build.gradle
+          sed -i "s/versionName '0.3.2'/versionName '0.4.0-rc2'/" PocketFrame/app/build.gradle
+          grep -q "versionCode 7" PocketFrame/app/build.gradle
+          grep -q "versionName '0.4.0-rc2'" PocketFrame/app/build.gradle
+
+      - name: Apply final app name
+        shell: bash
+        run: |
+          sed -i 's#<string name="app_name">PocketFrame</string>#<string name="app_name">GBA PocketFrame</string>#' PocketFrame/app/src/main/res/values/strings.xml
+          grep -q '<string name="app_name">GBA PocketFrame</string>' PocketFrame/app/src/main/res/values/strings.xml
 
       - name: RC feature freeze checks
         shell: bash
@@ -120,16 +126,17 @@ jobs:
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmgba_libretro.so'
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.4.0-rc1'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.4.0-rc2'"
           if "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump permissions "$APK" | grep -q 'android.permission.INTERNET'; then
             echo "Unexpected INTERNET permission" >&2
             exit 1
           fi
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
           sha256sum "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PocketFrame-v0.4.0-rc1-debug-apk
+          name: GBA-PocketFrame-v0.4.0-rc2-debug-apk
           path: PocketFrame/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
