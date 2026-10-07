@@ -28,7 +28,7 @@ jobs:
           test -f GBA-PocketFrame-1.0.0/app/build.gradle
           base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
           patch -p0 < rc4.patch
-          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../staging/rc5.patch)
+          base64 -d staging/rc5_patch.b64 | gzip -d > rc5.patch\n          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../rc5.patch)
 
       - name: RC5 stability and diagnostics checks
         shell: bash
@@ -57,6 +57,14 @@ jobs:
           grep -q 'POPUP_BG' "$MAIN"
           grep -q 'popupDivider' "$MAIN"
           grep -q 'Math.round(controlsDrawAlpha \* 0.90f)' "$SURFACE"
+          test -f "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
+          grep -q 'DIAGNOSTICS' "$MAIN"
+          grep -q 'EXPORT REPORT' "$MAIN"
+          grep -q 'ApplicationExitInfo' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
+          grep -q 'setDiagnosticListener' "$MAIN"
+          grep -q 'onCheckpoint' "$SURFACE"
+          grep -q 'android:allowBackup="false"' "$ROOT/app/src/main/AndroidManifest.xml"
+          test -f "$ROOT/PRIVACY.md"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
