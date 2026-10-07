@@ -15,6 +15,10 @@ Other mGBA bundled components include inih (BSD-3-Clause) and public-domain comp
 - License: Apache License 2.0
 - Preserve applicable LICENSE and NOTICE information.
 
+## Apache Commons Codec 1.19.0, IO 2.20.0 and Lang 3.18.0
+- License: Apache License 2.0
+- Runtime dependencies of Apache Commons Compress 1.28.0. Preserve applicable LICENSE and NOTICE information.
+
 ## XZ for Java 1.12
 - License: 0BSD
 - Used for archive support.
