@@ -1,0 +1,497 @@
+--- a/app/src/main/java/com/pocketframe/app/GameSurface.java
++++ b/app/src/main/java/com/pocketframe/app/GameSurface.java
+@@ -55,6 +55,10 @@
+     public static final int SCANLINE_SOFT = 1;
+     public static final int SCANLINE_CLASSIC = 2;
+     public static final int SCANLINE_LCD_GRID = 3;
++
++    public static final int VIDEO_FIT = 0;
++    public static final int VIDEO_FILL = 1;
++    public static final int VIDEO_PIXEL_1X = 2;
+ 
+     public static final int CONTROL_DPAD = 0;
+     public static final int CONTROL_ACTION = 1;
+@@ -87,6 +91,9 @@
+     private volatile float speedMultiplier = 1.0f;
+     private volatile int scanlineMode = SCANLINE_SOFT;
+     private volatile float videoOffsetY = 0f;
++    private volatile float topControlInsetPx = 0f;
++    private volatile int portraitVideoMode;
++    private volatile int landscapeVideoMode;
+     private int controlsDrawAlpha = 255;
+     private final SharedPreferences layoutPrefs;
+     private LayoutProfile portraitLayout = new LayoutProfile();
+@@ -143,6 +150,9 @@
+         layoutPrefs = context.getSharedPreferences("pocketframe", Context.MODE_PRIVATE);
+         portraitLayout = LayoutProfile.decode(layoutPrefs.getString("layout_working_p", ""));
+         landscapeLayout = LayoutProfile.decode(layoutPrefs.getString("layout_working_l", ""));
++        if (!layoutPrefs.contains("layout_working_l")) landscapeLayout.opacity = 0.80f;
++        portraitVideoMode = sanitizeVideoMode(layoutPrefs.getInt("video_scale_mode_p", VIDEO_FIT));
++        landscapeVideoMode = sanitizeVideoMode(layoutPrefs.getInt("video_scale_mode_l", VIDEO_FIT));
+         getHolder().addCallback(this);
+         setFocusable(true);
+         setKeepScreenOn(true);
+@@ -226,9 +236,39 @@
+         return Math.round(currentLayout().opacity * 100f);
+     }
+ 
++    public int getControlTransparencyPercent() {
++        return 100 - getControlOpacityPercent();
++    }
++
++    public void setTopControlInsetPx(float insetPx) {
++        topControlInsetPx = Math.max(0f, insetPx);
++        invalidate();
++    }
++
++    public int getVideoScaleMode() {
++        return getHeight() >= getWidth() ? portraitVideoMode : landscapeVideoMode;
++    }
++
++    public void setVideoScaleMode(int mode) {
++        mode = sanitizeVideoMode(mode);
++        if (getHeight() >= getWidth()) {
++            portraitVideoMode = mode;
++            layoutPrefs.edit().putInt("video_scale_mode_p", mode).apply();
++        } else {
++            landscapeVideoMode = mode;
++            layoutPrefs.edit().putInt("video_scale_mode_l", mode).apply();
++        }
++        invalidate();
++    }
++
++    private static int sanitizeVideoMode(int mode) {
++        return mode >= VIDEO_FIT && mode <= VIDEO_PIXEL_1X ? mode : VIDEO_FIT;
++    }
++
+     public void resetAllControlLayouts() {
+         portraitLayout = new LayoutProfile();
+         landscapeLayout = new LayoutProfile();
++        landscapeLayout.opacity = 0.80f;
+         persistWorkingLayouts();
+         invalidate();
+     }
+@@ -457,27 +497,51 @@
+         }
+     }
+ 
+-    private RectF videoRect(int srcW, int srcH) {
++    private RectF videoBounds() {
+         float W = getWidth();
+         float H = getHeight();
+         boolean portrait = H >= W;
+-
+-        // FIT mode: use the largest 3:2-preserving rectangle available between the controls.
+         float leftBound = portrait ? W * 0.02f : W * 0.235f;
+         float rightBound = portrait ? W * 0.98f : W * 0.765f;
+-        float topBound = portrait ? H * 0.105f : H * 0.055f;
+-        float bottomBound = portrait ? H * 0.545f : H * 0.945f;
+-
+-        float maxW = rightBound - leftBound;
+-        float maxH = bottomBound - topBound;
+-        float scale = Math.min(maxW / srcW, maxH / srcH);
++        if (portrait) return new RectF(leftBound, H * 0.105f, rightBound, H * 0.545f);
++
++        // Leave room for the entire touch areas, including users' saved button offsets.
++        float dpadCenter = W * (0.125f + landscapeLayout.dpadX);
++        float dpadHitRadius = H * 0.31f * 1.15f * landscapeLayout.dpadScale * 0.58f;
++        float bCenter = W * (0.82f + landscapeLayout.actionX);
++        float actionHitRadius = H * 0.108f * landscapeLayout.actionScale;
++        leftBound = Math.max(leftBound, dpadCenter + dpadHitRadius + dp(8));
++        rightBound = Math.min(rightBound, bCenter - actionHitRadius - dp(8));
++        rightBound = Math.max(leftBound + 1f, rightBound);
++
++        // The quick bar is a separate Android view. Its measured bottom is supplied by
++        // MainActivity, so the video never sits under the top row on dense displays.
++        float topBound = Math.max(H * 0.095f, Math.max(dp(50), topControlInsetPx + dp(8)));
++        topBound = Math.min(topBound, H - dp(40));
++        RectF menu = landscapeSystemHitRect(0, W, H, landscapeLayout);
++        RectF select = landscapeSystemHitRect(1, W, H, landscapeLayout);
++        RectF start = landscapeSystemHitRect(2, W, H, landscapeLayout);
++        float controlsTop = Math.min(menu.top, Math.min(select.top, start.top));
++        float bottomBound = Math.min(H * 0.86f, controlsTop - dp(10));
++        bottomBound = Math.max(topBound + 1f, bottomBound);
++        return new RectF(leftBound, topBound, rightBound, bottomBound);
++    }
++
++    private RectF videoRect(int srcW, int srcH) {
++        RectF bounds = videoBounds();
++        float maxW = bounds.width();
++        float maxH = bounds.height();
++        int mode = getVideoScaleMode();
++        float scale = mode == VIDEO_FILL
++                ? Math.max(maxW / srcW, maxH / srcH)
++                : mode == VIDEO_PIXEL_1X ? 1f : Math.min(maxW / srcW, maxH / srcH);
+         float targetW = srcW * scale;
+         float targetH = srcH * scale;
+ 
+-        float left = leftBound + (maxW - targetW) * 0.5f;
+-        float centeredTop = topBound + (maxH - targetH) * 0.5f;
+-        float minTop = topBound;
+-        float maxTop = bottomBound - targetH;
++        float left = bounds.left + (maxW - targetW) * 0.5f;
++        float centeredTop = bounds.top + (maxH - targetH) * 0.5f;
++        float minTop = Math.min(bounds.top, bounds.bottom - targetH);
++        float maxTop = Math.max(bounds.top, bounds.bottom - targetH);
+         float top = Math.max(minTop, Math.min(maxTop, centeredTop + videoOffsetY));
+         return new RectF(left, top, left + targetW, top + targetH);
+     }
+@@ -485,8 +549,11 @@
+     private void drawVideo(Canvas c, int w, int h) {
+         if (bitmap == null) return;
+         RectF dst = videoRect(w, h);
++        int saveCount = c.save();
++        c.clipRect(videoBounds());
+         c.drawBitmap(bitmap, null, dst, videoPaint);
+         drawScanlines(c, dst, w, h);
++        c.restoreToCount(saveCount);
+     }
+ 
+     private void drawScanlines(Canvas c, RectF dst, int srcW, int srcH) {
+@@ -565,7 +632,7 @@
+             drawSystemButton(c, selectX, sysY, sysW, H * 0.038f * p.systemScale, "SELECT", (active & SELECT) != 0);
+             drawSystemButton(c, startX, sysY, sysW, H * 0.038f * p.systemScale, "START", (active & START) != 0);
+         } else {
+-            float dCx = W * (0.145f + p.dpadX);
++            float dCx = W * (0.125f + p.dpadX);
+             float dCy = H * (0.62f + p.dpadY);
+             float dSize = H * 0.31f * 1.15f * p.dpadScale;
+             drawDPad(c, dCx, dCy, dSize, active);
+@@ -573,25 +640,45 @@
+             float r = H * 0.088f * p.actionScale;
+             float ax = W * p.actionX, ay = H * p.actionY;
+             drawActionButton(c, W * 0.875f + ax, H * 0.53f + ay, r, "A", (active & A) != 0, true);
+-            drawActionButton(c, W * 0.79f + ax, H * 0.69f + ay, r, "B", (active & B) != 0, false);
++            drawActionButton(c, W * 0.82f + ax, H * 0.69f + ay, r, "B", (active & B) != 0, false);
+ 
+             float sx = W * p.shoulderX, sy = H * p.shoulderY;
+             drawShoulder(c, W * 0.13f + sx, H * 0.25f + sy, W * 0.135f * p.shoulderScale, H * 0.07f * p.shoulderScale, "L", (active & L) != 0);
+             drawShoulder(c, W * 0.87f + sx, H * 0.25f + sy, W * 0.135f * p.shoulderScale, H * 0.07f * p.shoulderScale, "R", (active & R) != 0);
+ 
+-            drawSystemButton(c, W * (0.50f + p.menuX), H * (0.80f + p.menuY), W * 0.14f * p.menuScale, H * 0.07f * p.menuScale, "MENU", false);
+-
+-            float sysW = W * 0.082f * p.systemScale;
+-            float sysGap = dp(10) * p.systemScale;
+-            float sysCenter = W * (0.51f + p.systemX);
+-            float sysY = H * (0.89f + p.systemY);
+-            float selectX = sysCenter - (sysW + sysGap) * 0.5f;
+-            float startX = sysCenter + (sysW + sysGap) * 0.5f;
+-            drawSystemButton(c, selectX, sysY, sysW, H * 0.05f * p.systemScale, "SELECT", (active & SELECT) != 0);
+-            drawSystemButton(c, startX, sysY, sysW, H * 0.05f * p.systemScale, "START", (active & START) != 0);
++            drawLandscapeSystemButton(c, 0, W, H, p, "MENU", false);
++            drawLandscapeSystemButton(c, 1, W, H, p, "SELECT", (active & SELECT) != 0);
++            drawLandscapeSystemButton(c, 2, W, H, p, "START", (active & START) != 0);
+         }
+ 
+         controlsDrawAlpha = 255;
++    }
++
++    private RectF landscapeSystemRect(int slot, float W, float H, LayoutProfile p) {
++        float centerX = W * ((slot == 0 ? 0.37f : slot == 1 ? 0.50f : 0.63f)
++                + (slot == 0 ? p.menuX : p.systemX));
++        float centerY = H * (0.925f + (slot == 0 ? p.menuY : p.systemY));
++        float scale = slot == 0 ? p.menuScale : p.systemScale;
++        float width = W * 0.10f * scale;
++        float height = Math.min(H * 0.065f, dp(38)) * scale;
++        return new RectF(centerX - width / 2f, centerY - height / 2f,
++                centerX + width / 2f, centerY + height / 2f);
++    }
++
++    private RectF landscapeSystemHitRect(int slot, float W, float H, LayoutProfile p) {
++        RectF visible = landscapeSystemRect(slot, W, H, p);
++        float minSize = dp(44);
++        float extraX = Math.max(0f, minSize - visible.width()) / 2f;
++        float extraY = Math.max(0f, minSize - visible.height()) / 2f;
++        visible.inset(-extraX, -extraY);
++        return visible;
++    }
++
++    private void drawLandscapeSystemButton(Canvas c, int slot, float W, float H,
++                                           LayoutProfile p, String label, boolean pressed) {
++        RectF rect = landscapeSystemRect(slot, W, H, p);
++        drawSystemButton(c, rect.centerX(), rect.centerY(), rect.width(), rect.height(),
++                label, pressed);
+     }
+ 
+     private void drawDPad(Canvas c, float cx, float cy, float size, int active) {
+@@ -656,7 +743,7 @@
+ 
+     private void drawSystemButton(Canvas c, float cx, float cy, float w, float h, String label, boolean pressed) {
+         RectF rect = new RectF(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f);
+-        int alpha = "MENU".equals(label) ? Math.round(controlsDrawAlpha * 0.90f) : controlsDrawAlpha;
++        int alpha = controlsDrawAlpha;
+         controlPaint.setColor(pressed ? Color.rgb(62, 70, 82) : Color.rgb(28, 32, 38));
+         controlPaint.setAlpha(alpha);
+         c.drawRoundRect(rect, h / 2f, h / 2f, controlPaint);
+@@ -707,11 +794,8 @@
+             float h = Math.max(H * 0.060f * p.menuScale, dp(44));
+             return insideRect(x, y, cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f);
+         }
+-        float cx = W * (0.50f + p.menuX);
+-        float cy = H * (0.80f + p.menuY);
+-        float w = W * 0.16f * p.menuScale;
+-        float h = Math.max(H * 0.10f * p.menuScale, dp(44));
+-        return insideRect(x, y, cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f);
++        RectF menu = landscapeSystemHitRect(0, W, H, p);
++        return menu.contains(x, y);
+     }
+ 
+     private int hitMask(float x, float y) {
+@@ -747,31 +831,24 @@
+             if (insideRect(x, y, selectX - sysW * 0.56f, sysY - sysH/2f, selectX + sysW * 0.56f, sysY + sysH/2f)) return SELECT;
+             if (insideRect(x, y, startX - sysW * 0.56f, sysY - sysH/2f, startX + sysW * 0.56f, sysY + sysH/2f)) return START;
+         } else {
+-            float cx = W * (0.145f + p.dpadX);
++            float cx = W * (0.125f + p.dpadX);
+             float cy = H * (0.62f + p.dpadY);
+-            float size = H * 0.35f * 1.15f * p.dpadScale;
++            float size = H * 0.31f * 1.15f * p.dpadScale;
+             int dpad = dpadHit(x, y, cx, cy, size);
+             if (dpad != 0) return dpad;
+ 
+             float r = H * 0.108f * p.actionScale;
+             float ax = W * p.actionX, ay = H * p.actionY;
+             if (insideCircle(x, y, W * 0.875f + ax, H * 0.53f + ay, r)) return A;
+-            if (insideCircle(x, y, W * 0.79f + ax, H * 0.69f + ay, r)) return B;
++            if (insideCircle(x, y, W * 0.82f + ax, H * 0.69f + ay, r)) return B;
+ 
+             float sx = W * p.shoulderX, sy = H * p.shoulderY;
+             float sw = W * 0.14f * p.shoulderScale, sh = H * 0.10f * p.shoulderScale;
+             if (insideRect(x, y, W * 0.13f + sx - sw/2f, H * 0.25f + sy - sh/2f, W * 0.13f + sx + sw/2f, H * 0.25f + sy + sh/2f)) return L;
+             if (insideRect(x, y, W * 0.87f + sx - sw/2f, H * 0.25f + sy - sh/2f, W * 0.87f + sx + sw/2f, H * 0.25f + sy + sh/2f)) return R;
+ 
+-            float sysW = W * 0.082f * p.systemScale;
+-            float sysGap = dp(10) * p.systemScale;
+-            float sysCenter = W * (0.51f + p.systemX);
+-            float sysY = H * (0.89f + p.systemY);
+-            float selectX = sysCenter - (sysW + sysGap) * 0.5f;
+-            float startX = sysCenter + (sysW + sysGap) * 0.5f;
+-            float sysH = Math.max(H * 0.09f * p.systemScale, dp(44));
+-            if (insideRect(x, y, selectX - sysW * 0.56f, sysY - sysH/2f, selectX + sysW * 0.56f, sysY + sysH/2f)) return SELECT;
+-            if (insideRect(x, y, startX - sysW * 0.56f, sysY - sysH/2f, startX + sysW * 0.56f, sysY + sysH/2f)) return START;
++            if (landscapeSystemHitRect(1, W, H, p).contains(x, y)) return SELECT;
++            if (landscapeSystemHitRect(2, W, H, p).contains(x, y)) return START;
+         }
+         return 0;
+     }
+--- a/app/src/main/java/com/pocketframe/app/MainActivity.java
++++ b/app/src/main/java/com/pocketframe/app/MainActivity.java
+@@ -195,7 +195,10 @@
+         addQuickButton(scanButton);
+         addQuickButton(save);
+         addQuickButton(load);
++        quickBar.addOnLayoutChangeListener((v, left, top, right, bottom,
++                                            oldLeft, oldTop, oldRight, oldBottom) -> refreshGameOverlayLayout());
+         root.addView(quickBar);
++        quickBar.post(this::refreshGameOverlayLayout);
+     }
+ 
+     private TextView miniButton(String text) {
+@@ -206,7 +209,7 @@
+         view.setTextSize(10);
+         view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+         view.setLetterSpacing(0.045f);
+-        view.setBackground(rounded(Color.argb(205, 25, 29, 35), dp(12), PANEL_STROKE, 1));
++        view.setBackground(rounded(Color.rgb(25, 29, 35), dp(12), PANEL_STROKE, 1));
+         view.setClickable(true);
+         view.setFocusable(true);
+         return view;
+@@ -395,24 +398,26 @@
+                 "QUICK LOAD",
+                 "SPEED  ·  " + speedLabel(SPEEDS[speedIndex]),
+                 "SCANLINE  ·  " + scanlineName(gameSurface.getScanlineMode()),
++                "SCREEN SIZE  ·  " + screenSizeLabel(gameSurface.getVideoScaleMode()),
+                 "SCREEN POSITION",
+                 "CONTROL LAYOUT",
+                 "DIAGNOSTICS",
+                 "CLOSE GAME",
+                 "EXIT APP"
+         };
+-        showLineMenu("GBA PocketFrame", items, 8, which -> {
++        showLineMenu("GBA PocketFrame", items, 9, which -> {
+             switch (which) {
+                 case 0: saveCurrentGame(); openRomPicker(); break;
+                 case 1: quickSaveState(); break;
+                 case 2: confirmQuickLoad(); break;
+                 case 3: showSpeedDialog(); break;
+                 case 4: cycleScanline(); break;
+-                case 5: showScreenPositionDialog(); break;
+-                case 6: showControlLayoutDialog(); break;
+-                case 7: showDiagnosticsMenu(); break;
+-                case 8: confirmCloseGame(); break;
+-                case 9: confirmExitApp(); break;
++                case 5: showScreenSizeDialog(); break;
++                case 6: showScreenPositionDialog(); break;
++                case 7: showControlLayoutDialog(); break;
++                case 8: showDiagnosticsMenu(); break;
++                case 9: confirmCloseGame(); break;
++                case 10: confirmExitApp(); break;
+             }
+         });
+     }
+@@ -434,6 +439,17 @@
+                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+         panel.addView(popupDivider(), new LinearLayout.LayoutParams(
+                 LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
++
++        ScrollView scroller = new ScrollView(this);
++        scroller.setFillViewport(false);
++        scroller.setVerticalScrollBarEnabled(items.length > 4);
++        LinearLayout rows = new LinearLayout(this);
++        rows.setOrientation(LinearLayout.VERTICAL);
++        scroller.addView(rows);
++        int availableRowsHeight = Math.max(dp(100), getResources().getDisplayMetrics().heightPixels - dp(136));
++        int rowsHeight = Math.min(items.length * dp(47), availableRowsHeight);
++        panel.addView(scroller, new LinearLayout.LayoutParams(
++                LinearLayout.LayoutParams.MATCH_PARENT, rowsHeight));
+ 
+         AlertDialog dialog = new AlertDialog.Builder(this).setView(panel).create();
+         for (int i = 0; i < items.length; ++i) {
+@@ -452,10 +468,10 @@
+                 dialog.dismiss();
+                 action.onItem(which);
+             });
+-            panel.addView(row, new LinearLayout.LayoutParams(
++            rows.addView(row, new LinearLayout.LayoutParams(
+                     LinearLayout.LayoutParams.MATCH_PARENT, dp(46)));
+             if (i < items.length - 1) {
+-                panel.addView(popupDivider(), new LinearLayout.LayoutParams(
++                rows.addView(popupDivider(), new LinearLayout.LayoutParams(
+                         LinearLayout.LayoutParams.MATCH_PARENT, dp(1)));
+             }
+         }
+@@ -502,7 +518,7 @@
+                 "L / R  ·  " + orientation,
+                 "START / SELECT  ·  " + orientation,
+                 "MENU  ·  " + orientation,
+-                "CONTROL OPACITY  ·  " + gameSurface.getControlOpacityPercent() + "%",
++                "UI TRANSPARENCY  ·  " + gameSurface.getControlTransparencyPercent() + "%",
+                 "SAVE CUSTOM PRESET",
+                 "LOAD PRESET",
+                 "RESET DEFAULT"
+@@ -604,13 +620,13 @@
+         panel.setPadding(dp(14),dp(14),dp(14),dp(14));
+         panel.setBackground(rounded(POPUP_BG,dp(22),POPUP_LINE,1));
+         TextView value = new TextView(this);
+-        value.setText("CONTROL OPACITY  ·  " + gameSurface.getControlOpacityPercent() + "%");
++        value.setText("UI TRANSPARENCY  ·  " + gameSurface.getControlTransparencyPercent() + "%");
+         value.setTextColor(TEXT); value.setTextSize(14); value.setTypeface(Typeface.DEFAULT,Typeface.BOLD); value.setGravity(Gravity.CENTER);
+         panel.addView(value,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(46)));
+         LinearLayout row=new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
+         TextView minus=editorButton("− 10%"); TextView plus=editorButton("+ 10%");
+-        minus.setOnClickListener(v->{gameSurface.adjustControlOpacity(-0.10f); value.setText("CONTROL OPACITY  ·  "+gameSurface.getControlOpacityPercent()+"%");});
+-        plus.setOnClickListener(v->{gameSurface.adjustControlOpacity(0.10f); value.setText("CONTROL OPACITY  ·  "+gameSurface.getControlOpacityPercent()+"%");});
++        minus.setOnClickListener(v->{gameSurface.adjustControlOpacity(0.10f); value.setText("UI TRANSPARENCY  ·  "+gameSurface.getControlTransparencyPercent()+"%"); applyQuickBarTransparency();});
++        plus.setOnClickListener(v->{gameSurface.adjustControlOpacity(-0.10f); value.setText("UI TRANSPARENCY  ·  "+gameSurface.getControlTransparencyPercent()+"%"); applyQuickBarTransparency();});
+         for(TextView b:new TextView[]{minus,plus}){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(44),1f);lp.setMargins(dp(3),dp(4),dp(3),dp(4));row.addView(b,lp);}
+         panel.addView(row);
+         AlertDialog dialog=new AlertDialog.Builder(this).setView(panel).create();
+@@ -629,8 +645,8 @@
+     private void showLoadPresetDialog() {
+         final String[] items={"DEFAULT","CUSTOM 1","CUSTOM 2","CUSTOM 3"};
+         showLineMenu("Load Layout Preset",items,99,which->{
+-            if(which==0){gameSurface.resetAllControlLayouts();Toast.makeText(this,"Default layout loaded",Toast.LENGTH_SHORT).show();return;}
+-            if(gameSurface.loadLayoutPreset(which)) Toast.makeText(this,items[which]+" loaded",Toast.LENGTH_SHORT).show();
++            if(which==0){gameSurface.resetAllControlLayouts();applyQuickBarTransparency();Toast.makeText(this,"Default layout loaded",Toast.LENGTH_SHORT).show();return;}
++            if(gameSurface.loadLayoutPreset(which)){applyQuickBarTransparency();Toast.makeText(this,items[which]+" loaded",Toast.LENGTH_SHORT).show();}
+             else Toast.makeText(this,items[which]+" is empty",Toast.LENGTH_SHORT).show();
+         });
+     }
+@@ -639,7 +655,7 @@
+         new AlertDialog.Builder(this)
+                 .setTitle("Reset Control Layout")
+                 .setMessage("Reset portrait and landscape controls to the default layout?")
+-                .setPositiveButton("RESET",(d,w)->{gameSurface.resetAllControlLayouts();Toast.makeText(this,"Control layout reset",Toast.LENGTH_SHORT).show();})
++                .setPositiveButton("RESET",(d,w)->{gameSurface.resetAllControlLayouts();applyQuickBarTransparency();Toast.makeText(this,"Control layout reset",Toast.LENGTH_SHORT).show();})
+                 .setNegativeButton("CANCEL",null)
+                 .show();
+     }
+@@ -710,6 +726,34 @@
+         if (Math.abs(speed - 1.5f) < 0.01f) return "1.5×";
+         if (Math.abs(speed - 2.0f) < 0.01f) return "2×";
+         return "3×";
++    }
++
++    private String screenSizeLabel(int mode) {
++        if (mode == GameSurface.VIDEO_FILL) return "FILL";
++        if (mode == GameSurface.VIDEO_PIXEL_1X) return "1:1 PIXELS";
++        return "FIT";
++    }
++
++    private void showScreenSizeDialog() {
++        int mode = gameSurface.getVideoScaleMode();
++        final int[] values = {
++                GameSurface.VIDEO_FIT,
++                GameSurface.VIDEO_FILL,
++                GameSurface.VIDEO_PIXEL_1X
++        };
++        final String[] names = {
++                "FIT  ·  Entire image",
++                "FILL  ·  Fill area, crop edges",
++                "1:1 PIXELS  ·  Native pixel size"
++        };
++        String[] items = new String[names.length];
++        for (int i = 0; i < names.length; i++) {
++            items[i] = (mode == values[i] ? "✓  " : "    ") + names[i];
++        }
++        showLineMenu("Screen Size", items, 99, which -> {
++            gameSurface.setVideoScaleMode(values[which]);
++            Toast.makeText(this, "Screen size: " + screenSizeLabel(values[which]), Toast.LENGTH_SHORT).show();
++        });
+     }
+ 
+     private void showSpeedDialog() {
+@@ -840,7 +884,8 @@
+         header.setLayoutParams(headerLp);
+ 
+         FrameLayout.LayoutParams quickLp = new FrameLayout.LayoutParams(
+-                landscape ? dp(360) : FrameLayout.LayoutParams.MATCH_PARENT,
++                landscape ? Math.min(dp(360), getResources().getDisplayMetrics().widthPixels - dp(24))
++                          : FrameLayout.LayoutParams.MATCH_PARENT,
+                 dp(38),
+                 Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+         quickLp.topMargin = dp(landscape ? 8 : 12);
+@@ -865,7 +910,26 @@
+             cardLp.rightMargin = dp(24);
+         }
+         welcomeCard.setLayoutParams(cardLp);
+-
++        quickBar.post(this::refreshGameOverlayLayout);
++    }
++
++    private void refreshGameOverlayLayout() {
++        applyQuickBarTransparency();
++        syncTopControlInset();
++    }
++
++    private void applyQuickBarTransparency() {
++        float opacity = 1f - gameSurface.getControlTransparencyPercent() / 100f;
++        for (int i = 0; i < quickBar.getChildCount(); i++) {
++            quickBar.getChildAt(i).setAlpha(opacity);
++        }
++    }
++
++    private void syncTopControlInset() {
++        boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
++        float inset = landscape && quickBar.getVisibility() == View.VISIBLE
++                ? quickBar.getBottom() : 0f;
++        gameSurface.setTopControlInsetPx(inset);
+     }
+ 
+     @Override
+@@ -874,6 +938,7 @@
+         applyLayoutForOrientation();
+         gameSurface.requestLayout();
+         gameSurface.invalidate();
++        quickBar.post(this::refreshGameOverlayLayout);
+         diagnosticEvent("ORIENTATION_CHANGE");
+     }
+ 
+@@ -886,6 +951,7 @@
+         header.setVisibility(playing ? View.GONE : View.VISIBLE);
+         quickBar.setVisibility(playing ? View.VISIBLE : View.GONE);
+         applyImmersive(playing);
++        quickBar.post(this::refreshGameOverlayLayout);
+     }
+ 
+     @SuppressWarnings("deprecation")
