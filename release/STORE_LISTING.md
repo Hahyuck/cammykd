@@ -4,7 +4,7 @@
 GBA PocketFrame
 
 ## Short description
-Offline GB, GBC & GBA emulator frontend. Free, open-source, no ads or tracking.
+I built this GB/GBC/GBA emulator out of frustration, with save states
 
 ## Full description
 GBA PocketFrame is a lightweight, offline emulator frontend for Game Boy, Game Boy Color, and Game Boy Advance game files that you provide yourself.
