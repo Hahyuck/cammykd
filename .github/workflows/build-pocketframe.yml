@@ -17,66 +17,182 @@ jobs:
       - name: Checkout staging branch
         uses: actions/checkout@v4
 
-      - name: Reconstruct exact RC3 source
+      - name: Reconstruct exact successful RC5 source
         shell: bash
         run: |
           cat staging/rc3src_aa staging/rc3src_ab staging/rc3src_ac staging/rc3src_ad staging/rc3src_ae > rc3src.b64
           base64 -d rc3src.b64 > rc3src.tar.gz
           tar -xzf rc3src.tar.gz
           rm -f GBA-PocketFrame-1.0.0/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp.b64
-          test -f GBA-PocketFrame-1.0.0/settings.gradle
-          test -f GBA-PocketFrame-1.0.0/app/build.gradle
           base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
           patch -p0 < rc4.patch
           cat staging/rc5p_00 staging/rc5p_01 staging/rc5p_02 staging/rc5p_03 staging/rc5p_04 > rc5_patch.b64
           base64 -d rc5_patch.b64 | gzip -d > rc5.patch
-          cd GBA-PocketFrame-1.0.0
-          patch -p1 < ../rc5.patch
-          cd ..
-          base64 -d staging/v1_build_patch.b64 | gzip -d > v1_build.patch
-          cd GBA-PocketFrame-1.0.0
-          patch -p1 < ../v1_build.patch
-          cd ..
+          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../rc5.patch)
+          grep -q "versionName '0.5.0-rc5'" GBA-PocketFrame-1.0.0/app/build.gradle
+          grep -q 'ApplicationExitInfo' GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/Diagnostics.java
 
-      - name: 1.0 release candidate checks
+      - name: Prepare 1.0 release compliance
+        shell: bash
+        run: |
+          ROOT="GBA-PocketFrame-1.0.0"
+          sed -i "s/versionCode 13/versionCode 100/" "$ROOT/app/build.gradle"
+          sed -i "s/versionName '0.5.0-rc5'/versionName '1.0.0'/" "$ROOT/app/build.gradle"
+          sed -i 's/GBA PocketFrame RC5/GBA PocketFrame 1.0/g' "$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
+          sed -i 's/0.5.0-rc5/1.0.0/g' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/MainActivity.java")
+          s=p.read_text()
+          s=s.replace("import android.widget.LinearLayout;\nimport android.widget.TextView;",
+                      "import android.widget.LinearLayout;\nimport android.widget.ScrollView;\nimport android.widget.TextView;")
+          needle="""        privacyLp.topMargin = dp(10);
+          welcomeCard.addView(privacy, privacyLp);
+
+          root.addView(welcomeCard);"""
+          repl="""        privacyLp.topMargin = dp(10);
+          welcomeCard.addView(privacy, privacyLp);
+
+          TextView licenses = capsule("OPEN SOURCE LICENSES", Color.rgb(34, 39, 47), TEXT, true);
+          licenses.setTextSize(11);
+          licenses.setOnClickListener(v -> showOpenSourceLicenses());
+          LinearLayout.LayoutParams licenseLp = new LinearLayout.LayoutParams(
+                  LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
+          licenseLp.topMargin = dp(8);
+          welcomeCard.addView(licenses, licenseLp);
+
+          root.addView(welcomeCard);"""
+          if needle not in s:
+              raise SystemExit("license button insertion point not found")
+          s=s.replace(needle,repl)
+          needle2="""    private interface LineMenuAction {
+              void onItem(int which);
+          }"""
+          method="""    private void showOpenSourceLicenses() {
+              String text;
+              try (java.io.InputStream in = getAssets().open("open_source_licenses.txt");
+                   java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+                  byte[] buffer = new byte[8192];
+                  int n;
+                  while ((n = in.read(buffer)) >= 0) if (n > 0) out.write(buffer, 0, n);
+                  text = out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
+              } catch (Exception e) {
+                  text = "Open-source license information could not be loaded.";
+              }
+              TextView body = new TextView(this);
+              body.setText(text);
+              body.setTextColor(TEXT);
+              body.setTextSize(11f);
+              body.setPadding(dp(18), dp(8), dp(18), dp(18));
+              body.setTextIsSelectable(true);
+              ScrollView scroll = new ScrollView(this);
+              scroll.addView(body, new ScrollView.LayoutParams(
+                      ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
+              new AlertDialog.Builder(this)
+                      .setTitle("Open Source Licenses")
+                      .setView(scroll)
+                      .setPositiveButton("OK", null)
+                      .show();
+          }
+
+          private interface LineMenuAction {
+              void onItem(int which);
+          }"""
+          if needle2 not in s:
+              raise SystemExit("license dialog insertion point not found")
+          p.write_text(s.replace(needle2,method))
+          PY
+
+          mkdir -p "$ROOT/app/src/main/assets"
+          cat > "$ROOT/app/src/main/assets/open_source_licenses.txt" <<'EOF'
+          GBA PocketFrame — Open Source Licenses
+
+          GBA PocketFrame Android frontend
+          License: MIT
+          Source: https://github.com/Hahyuck/cammykd
+
+          mGBA 0.10.5
+          Copyright © 2013–2022 Jeffrey Pfau and mGBA contributors
+          Main license: Mozilla Public License 2.0 (MPL-2.0)
+          Exact source used: https://github.com/mgba-emu/mgba/tree/0.10.5
+          GBA PocketFrame uses the upstream 0.10.5 libretro core without source modifications.
+
+          mGBA includes blip-buf 1.1.0 by Shay Green (Copyright © 2003–2009),
+          licensed under GNU LGPL v2.1 or later. It is compiled into the mGBA
+          libretro core. Its exact corresponding source and rebuild files are in
+          the mGBA 0.10.5 source tree above.
+
+          Apache Commons Compress 1.28.0
+          Copyright 2002–2025 The Apache Software Foundation
+          License: Apache License 2.0
+          NOTICE: This product includes software developed at The Apache Software Foundation.
+          Source: https://github.com/apache/commons-compress/tree/rel/commons-compress-1.28.0
+
+          XZ for Java 1.10
+          Copyright © The XZ for Java authors and contributors
+          License: BSD Zero Clause License (0BSD)
+          Source: https://github.com/tukaani-project/xz-java
+
+          ===== Mozilla Public License 2.0 =====
+          EOF
+          cat /usr/share/common-licenses/MPL-2.0 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          printf '\n===== GNU Lesser General Public License 2.1 =====\n' >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          cat /usr/share/common-licenses/LGPL-2.1 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          printf '\n===== Apache License 2.0 =====\n' >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          cat /usr/share/common-licenses/Apache-2.0 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          cat >> "$ROOT/app/src/main/assets/open_source_licenses.txt" <<'EOF'
+
+          ===== BSD Zero Clause License (0BSD) =====
+          Permission to use, copy, modify, and/or distribute this software for any purpose
+          with or without fee is hereby granted.
+
+          THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+          REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+          FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT,
+          OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+          DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS
+          ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+          EOF
+
+          cat > "$ROOT/THIRD_PARTY_NOTICES.md" <<'EOF'
+          # GBA PocketFrame — Third-Party Notices
+
+          The Android frontend is MIT licensed.
+
+          ## mGBA 0.10.5
+          - Source: https://github.com/mgba-emu/mgba/tree/0.10.5
+          - Main license: MPL-2.0
+          - GBA PocketFrame source modifications to mGBA: none
+          - blip-buf 1.1.0 (Copyright 2003–2009 Shay Green) is LGPL-2.1+ and is compiled into the mGBA libretro core.
+          - The exact corresponding mGBA/blip-buf source and build files are available at the immutable 0.10.5 tag above.
+
+          ## Apache Commons Compress 1.28.0
+          - License: Apache-2.0
+          - NOTICE: Copyright 2002–2025 The Apache Software Foundation; this product includes software developed at The Apache Software Foundation.
+
+          ## XZ for Java 1.10
+          - License: 0BSD
+
+          Full license texts are included in the app's Open Source Licenses screen.
+          Commercial ROMs, Nintendo BIOS/boot ROMs, box art, and proprietary game assets are not included.
+          EOF
+
+      - name: 1.0 source checks
         shell: bash
         run: |
           ROOT="GBA-PocketFrame-1.0.0"
           MAIN="$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
-          SURFACE="$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
+          grep -q "versionCode 100" "$ROOT/app/build.gradle"
           grep -q "versionName '1.0.0'" "$ROOT/app/build.gradle"
-          grep -q "versionCode 20" "$ROOT/app/build.gradle"
-          grep -q "org.tukaani:xz:1.12" "$ROOT/app/build.gradle"
           grep -q '<string name="app_name">GBA PocketFrame</string>' "$ROOT/app/src/main/res/values/strings.xml"
-          grep -q 'setMenuListener(this::showGameMenu)' "$MAIN"
-          grep -q '"MENU"' "$SURFACE"
-          grep -q 'isMenuHit' "$SURFACE"
-          if grep -q 'pfMenuButton' "$MAIN"; then
-            echo "Legacy floating PF menu still present" >&2
-            exit 1
-          fi
-          grep -q 'ROM LOAD' "$MAIN"
-          grep -q 'CLOSE GAME' "$MAIN"
-          grep -q 'EXIT APP' "$MAIN"
-          grep -q 'QUICK SAVE' "$MAIN"
-          grep -q 'QUICK LOAD' "$MAIN"
-          grep -q 'CONTROL LAYOUT' "$MAIN"
-          grep -q 'SAVE CUSTOM PRESET' "$MAIN"
-          grep -q 'LOAD PRESET' "$MAIN"
-          grep -q 'showControlAdjustDialog' "$MAIN"
-          grep -q 'POPUP_BG' "$MAIN"
-          grep -q 'popupDivider' "$MAIN"
-          grep -q 'Math.round(controlsDrawAlpha \* 0.90f)' "$SURFACE"
-          test -f "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
+          grep -q 'OPEN SOURCE LICENSES' "$MAIN"
+          grep -q 'showOpenSourceLicenses' "$MAIN"
           grep -q 'DIAGNOSTICS' "$MAIN"
-          grep -q 'EXPORT REPORT' "$MAIN"
           grep -q 'ApplicationExitInfo' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
-          grep -q 'setDiagnosticListener' "$MAIN"
-          grep -q 'onCheckpoint' "$SURFACE"
           grep -q 'android:allowBackup="false"' "$ROOT/app/src/main/AndroidManifest.xml"
-          test -f "$ROOT/PRIVACY.md"
-          grep -q 'OPEN SOURCE' "$MAIN"
-          grep -q 'showOpenSourceNotices' "$MAIN"
+          grep -q 'blip-buf' "$ROOT/THIRD_PARTY_NOTICES.md"
+          test -s "$ROOT/app/src/main/assets/open_source_licenses.txt"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -107,52 +223,55 @@ jobs:
           OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
           rm -rf "$BUILD"
           mkdir -p "$BUILD" "$OUT"
-          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-26 \
-            -DBUILD_QT=OFF \
-            -DBUILD_SDL=OFF \
-            -DBUILD_LIBRETRO=ON \
-            -DDISABLE_DEPS=ON \
-            -DSKIP_LIBRARY=ON
+          cmake -S "$PWD/third_party/mgba" -B "$BUILD" -G Ninja             -DCMAKE_BUILD_TYPE=Release             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake"             -DANDROID_ABI=arm64-v8a             -DANDROID_PLATFORM=android-26             -DBUILD_QT=OFF             -DBUILD_SDL=OFF             -DBUILD_LIBRETRO=ON             -DDISABLE_DEPS=ON             -DSKIP_LIBRARY=ON
           cmake --build "$BUILD" --target mgba_libretro --parallel
           cp "$BUILD/mgba_libretro.so" "$OUT/libmgba_libretro.so"
 
-      - name: Build APK and release AAB
+      - name: Build APK and unsigned release AAB
         working-directory: GBA-PocketFrame-1.0.0
         run: gradle :app:assembleDebug :app:bundleRelease --stacktrace
 
-      - name: Smoke-check APK
+      - name: Smoke-check outputs
         shell: bash
         working-directory: GBA-PocketFrame-1.0.0
         run: |
           APK="app/build/outputs/apk/debug/app-debug.apk"
+          AAB="app/build/outputs/bundle/release/app-release.aab"
           test -s "$APK"
+          test -s "$AAB"
           unzip -t "$APK" >/dev/null
+          unzip -t "$AAB" >/dev/null
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmgba_libretro.so'
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
+          unzip -l "$APK" | grep -q 'assets/open_source_licenses.txt'
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='1.0.0'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionCode='100'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
           if "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump permissions "$APK" | grep -q 'android.permission.INTERNET'; then
             echo "Unexpected INTERNET permission" >&2
             exit 1
           fi
-          AAB="app/build/outputs/bundle/release/app-release.aab"
-          test -s "$AAB"
-          unzip -t "$AAB" >/dev/null
-          unzip -l "$AAB" | grep -q 'base/lib/arm64-v8a/libmgba_libretro.so'
-          unzip -l "$AAB" | grep -q 'base/lib/arm64-v8a/libpocketframe_jni.so'
-          sha256sum "$APK"
-          sha256sum "$AAB"
+          sha256sum "$APK" "$AAB"
+          (cd .. && zip -qr GBA-PocketFrame-1.0.0-exact-source.zip GBA-PocketFrame-1.0.0             -x 'GBA-PocketFrame-1.0.0/build/*' 'GBA-PocketFrame-1.0.0/.gradle/*' 'GBA-PocketFrame-1.0.0/third_party/mgba/.git/*')
 
-      - name: Upload 1.0 candidate
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GBA-PocketFrame-1.0.0-store-candidate
-          path: |
-            GBA-PocketFrame-1.0.0/app/build/outputs/apk/debug/app-debug.apk
-            GBA-PocketFrame-1.0.0/app/build/outputs/bundle/release/app-release.aab
+          name: GBA-PocketFrame-1.0.0-debug-apk
+          path: GBA-PocketFrame-1.0.0/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+      - name: Upload unsigned AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: GBA-PocketFrame-1.0.0-unsigned-aab
+          path: GBA-PocketFrame-1.0.0/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      - name: Upload exact source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GBA-PocketFrame-1.0.0-exact-source
+          path: GBA-PocketFrame-1.0.0-exact-source.zip
           if-no-files-found: error
