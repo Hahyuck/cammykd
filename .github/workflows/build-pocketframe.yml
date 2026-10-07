@@ -28,7 +28,10 @@ jobs:
           test -f GBA-PocketFrame-1.0.0/app/build.gradle
           base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
           patch -p0 < rc4.patch
-          base64 -d staging/rc5_patch.b64 | gzip -d > rc5.patch\n          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../rc5.patch)
+          base64 -d staging/rc5_patch.b64 | gzip -d > rc5.patch
+          cd GBA-PocketFrame-1.0.0
+          patch -p1 < ../rc5.patch
+          cd ..
 
       - name: RC5 stability and diagnostics checks
         shell: bash
