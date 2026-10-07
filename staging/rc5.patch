@@ -1,0 +1,427 @@
+diff -ruN rc4orig/app/build.gradle rc5build/app/build.gradle
+--- rc4orig/app/build.gradle	2026-10-06 23:49:27.000000000 +0000
++++ rc5build/app/build.gradle	2026-10-07 01:03:01.370770272 +0000
+@@ -10,8 +10,8 @@
+         applicationId 'com.pocketframe.app'
+         minSdk 26
+         targetSdk 36
+-        versionCode 12
+-        versionName '0.5.0-rc4'
++        versionCode 13
++        versionName '0.5.0-rc5'
+ 
+         ndk {
+             abiFilters 'arm64-v8a'
+diff -ruN rc4orig/app/src/main/AndroidManifest.xml rc5build/app/src/main/AndroidManifest.xml
+--- rc4orig/app/src/main/AndroidManifest.xml	2026-10-06 15:03:17.000000000 +0000
++++ rc5build/app/src/main/AndroidManifest.xml	2026-10-07 01:03:01.370714840 +0000
+@@ -4,7 +4,7 @@
+     <!-- Intentionally no INTERNET permission. PocketFrame is local-only. -->
+ 
+     <application
+-        android:allowBackup="true"
++        android:allowBackup="false"
+         android:extractNativeLibs="true"
+         android:label="@string/app_name"
+         android:icon="@mipmap/ic_launcher"
+diff -ruN rc4orig/app/src/main/java/com/pocketframe/app/DiagnosticLog.java rc5build/app/src/main/java/com/pocketframe/app/DiagnosticLog.java
+--- rc4orig/app/src/main/java/com/pocketframe/app/DiagnosticLog.java	1970-01-01 00:00:00.000000000 +0000
++++ rc5build/app/src/main/java/com/pocketframe/app/DiagnosticLog.java	2026-10-07 01:03:00.262972412 +0000
+@@ -0,0 +1,93 @@
++package com.pocketframe.app;
++
++import android.content.Context;
++import android.os.Build;
++
++import java.io.ByteArrayOutputStream;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.nio.charset.StandardCharsets;
++import java.text.SimpleDateFormat;
++import java.util.Date;
++import java.util.Locale;
++
++final class DiagnosticLog {
++    private static final long MAX_BYTES = 64 * 1024;
++    private static final long KEEP_BYTES = 48 * 1024;
++    private static final String FILE_NAME = "diagnostic.log";
++
++    private DiagnosticLog() {}
++
++    static synchronized void append(Context context, String event) {
++        try {
++            File file = new File(context.getFilesDir(), FILE_NAME);
++            trimIfNeeded(file);
++            String ts = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(new Date());
++            String line = ts + "  " + sanitize(event) + "\n";
++            try (FileOutputStream out = new FileOutputStream(file, true)) {
++                out.write(line.getBytes(StandardCharsets.UTF_8));
++                out.getFD().sync();
++            }
++        } catch (Exception ignored) {}
++    }
++
++    static synchronized String report(Context context) {
++        StringBuilder out = new StringBuilder();
++        out.append("GBA PocketFrame diagnostic report\n");
++        out.append("App: 0.5.0-rc5\n");
++        out.append("Android: ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
++        out.append("Device: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append("\n");
++        out.append("ABI: ").append(Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown").append("\n");
++        out.append("Network permission: none\n");
++        out.append("ROM names/content: not recorded; only a short SHA-256 identifier is logged.\n\n");
++        out.append("--- local event log ---\n");
++        try {
++            File file = new File(context.getFilesDir(), FILE_NAME);
++            if (!file.isFile()) return out.append("(empty)\n").toString();
++            try (FileInputStream in = new FileInputStream(file)) {
++                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
++                byte[] buf = new byte[8192];
++                int n;
++                while ((n = in.read(buf)) >= 0) if (n > 0) bytes.write(buf, 0, n);
++                out.append(bytes.toString(StandardCharsets.UTF_8.name()));
++            }
++        } catch (Exception e) {
++            out.append("(log read failed)\n");
++        }
++        return out.toString();
++    }
++
++    static synchronized void clear(Context context) {
++        try { new File(context.getFilesDir(), FILE_NAME).delete(); } catch (Exception ignored) {}
++    }
++
++    private static void trimIfNeeded(File file) throws Exception {
++        if (!file.isFile() || file.length() <= MAX_BYTES) return;
++        long len = file.length();
++        int keep = (int) Math.min(KEEP_BYTES, len);
++        byte[] tail = new byte[keep];
++        try (FileInputStream in = new FileInputStream(file)) {
++            long skip = Math.max(0, len - keep);
++            while (skip > 0) {
++                long s = in.skip(skip);
++                if (s <= 0) break;
++                skip -= s;
++            }
++            int off = 0;
++            while (off < tail.length) {
++                int n = in.read(tail, off, tail.length - off);
++                if (n < 0) break;
++                off += n;
++            }
++        }
++        try (FileOutputStream out = new FileOutputStream(file, false)) {
++            out.write(tail);
++        }
++    }
++
++    private static String sanitize(String text) {
++        if (text == null) return "";
++        return text.replace('\n', ' ').replace('\r', ' ');
++    }
++}
+diff -ruN rc4orig/app/src/main/java/com/pocketframe/app/GameSurface.java rc5build/app/src/main/java/com/pocketframe/app/GameSurface.java
+--- rc4orig/app/src/main/java/com/pocketframe/app/GameSurface.java	2026-10-06 23:50:02.000000000 +0000
++++ rc5build/app/src/main/java/com/pocketframe/app/GameSurface.java	2026-10-07 01:03:01.370559089 +0000
+@@ -81,6 +81,7 @@
+     private volatile int scanlineMode = SCANLINE_SOFT;
+     private volatile float videoOffsetY = 0f;
+     private int controlsDrawAlpha = 255;
++    private volatile long frameCounter;
+     private final SharedPreferences layoutPrefs;
+     private LayoutProfile portraitLayout = new LayoutProfile();
+     private LayoutProfile landscapeLayout = new LayoutProfile();
+@@ -288,6 +289,8 @@
+         return speedMultiplier;
+     }
+ 
++    public long getFrameCount() { return frameCounter; }
++
+     public void setGameLoaded(boolean loaded) {
+         gameLoaded = loaded;
+         if (loaded) startLoop();
+@@ -385,6 +388,7 @@
+ 
+         while (running.get()) {
+             NativeBridge.runFrame();
++            frameCounter++;
+ 
+             if (audioTrack != null) {
+                 int shorts = NativeBridge.drainAudio(audioScratch);
+diff -ruN rc4orig/app/src/main/java/com/pocketframe/app/MainActivity.java rc5build/app/src/main/java/com/pocketframe/app/MainActivity.java
+--- rc4orig/app/src/main/java/com/pocketframe/app/MainActivity.java	2026-10-06 23:49:27.000000000 +0000
++++ rc5build/app/src/main/java/com/pocketframe/app/MainActivity.java	2026-10-07 01:03:25.318684784 +0000
+@@ -12,6 +12,8 @@
+ import android.graphics.drawable.ColorDrawable;
+ import android.net.Uri;
+ import android.os.Bundle;
++import android.os.Handler;
++import android.os.Looper;
+ import android.provider.OpenableColumns;
+ import android.view.Gravity;
+ import android.view.InputDevice;
+@@ -43,6 +45,7 @@
+ 
+ public final class MainActivity extends Activity {
+     private static final int PICK_ROM = 1001;
++    private static final int EXPORT_DIAGNOSTIC = 1002;
+     private static final int MAX_ROM_BYTES = 64 * 1024 * 1024;
+     private static final long MAX_ARCHIVE_BYTES = 1024L * 1024L * 1024L;
+ 
+@@ -72,6 +75,20 @@
+     private boolean gameLoaded;
+     private int physicalMask;
+     private int analogMask;
++    private final Handler diagnosticHandler = new Handler(Looper.getMainLooper());
++    private boolean normalShutdown;
++    private final Runnable diagnosticHeartbeat = new Runnable() {
++        @Override public void run() {
++            if (gameLoaded) {
++                DiagnosticLog.append(MainActivity.this, "heartbeat rom=" + safeRomId() +
++                        " frame=" + gameSurface.getFrameCount() +
++                        " speed=" + speedLabel(SPEEDS[speedIndex]) +
++                        " scanline=" + scanlineName(gameSurface.getScanlineMode()) +
++                        " orientation=" + orientationName());
++            }
++            diagnosticHandler.postDelayed(this, 30000L);
++        }
++    };
+ 
+     @Override
+     protected void onCreate(Bundle savedInstanceState) {
+@@ -81,6 +98,19 @@
+ 
+         prefs = getSharedPreferences("pocketframe", MODE_PRIVATE);
+ 
++        boolean previousActive = prefs.getBoolean("diagnostic_session_active", false);
++        if (previousActive) DiagnosticLog.append(this, "previous session ended unexpectedly or process was killed");
++        prefs.edit().putBoolean("diagnostic_session_active", true).apply();
++        DiagnosticLog.append(this, "session start");
++        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
++            private final Thread.UncaughtExceptionHandler prior = Thread.getDefaultUncaughtExceptionHandler();
++            @Override public void uncaughtException(Thread thread, Throwable error) {
++                DiagnosticLog.append(MainActivity.this, "java crash thread=" + thread.getName() + " type=" + error.getClass().getSimpleName());
++                if (prior != null) prior.uncaughtException(thread, error);
++            }
++        });
++        diagnosticHandler.postDelayed(diagnosticHeartbeat, 30000L);
++
+         root = new FrameLayout(this);
+         root.setBackgroundColor(BG);
+ 
+@@ -138,7 +168,7 @@
+                 LinearLayout.LayoutParams.WRAP_CONTENT));
+ 
+         statusText = new TextView(this);
+-        statusText.setText("GBA PocketFrame RC4");
++        statusText.setText("GBA PocketFrame RC5");
+         statusText.setTextColor(MUTED);
+         statusText.setTextSize(10.5f);
+         statusText.setSingleLine(true);
+@@ -212,6 +242,7 @@
+         int next = (gameSurface.getScanlineMode() + 1) % 4;
+         gameSurface.setScanlineMode(next);
+         prefs.edit().putInt("scanline_mode", next).apply();
++        DiagnosticLog.append(this, "scanline=" + scanlineName(next) + " rom=" + safeRomId());
+         scanButton.setText(scanlineLabel(next));
+         Toast.makeText(this, "Scanline: " + scanlineName(next), Toast.LENGTH_SHORT).show();
+     }
+@@ -315,8 +346,10 @@
+                 "Save RAM and save states are stored locally in the app's private storage. " +
+                 "No game files or save data are uploaded by GBA PocketFrame.\n\n" +
+                 "Bluetooth or USB game controller input is processed locally and is not recorded or transmitted.\n\n" +
++                "Optional local diagnostics record app lifecycle events, a short ROM SHA-256 identifier, frame count, speed, scanline mode, orientation, and save-state outcomes. ROM names and ROM contents are not recorded. Diagnostic logs stay on-device, are never uploaded automatically, and can be exported or cleared by the user.\n\n" +
++                "Android automatic backup is disabled for GBA PocketFrame.\n\n" +
+                 "Games and ROM files are not included with the app. Users are responsible for using files they are legally entitled to use.\n\n" +
+-                "Data retention: local save data remains on the device until you remove it or uninstall the app.\n\n" +
++                "Data retention: local save data and diagnostics remain on the device until you remove them or uninstall the app.\n\n" +
+                 "Privacy inquiries: github.com/Hahyuck/cammykd/issues";
+ 
+         new AlertDialog.Builder(this)
+@@ -340,10 +373,11 @@
+                 "SCANLINE  ·  " + scanlineName(gameSurface.getScanlineMode()),
+                 "SCREEN POSITION",
+                 "CONTROL LAYOUT",
++                "DIAGNOSTICS",
+                 "CLOSE GAME",
+                 "EXIT APP"
+         };
+-        showLineMenu("GBA PocketFrame", items, 7, which -> {
++        showLineMenu("GBA PocketFrame", items, 8, which -> {
+             switch (which) {
+                 case 0: saveCurrentGame(); openRomPicker(); break;
+                 case 1: quickSaveState(); break;
+@@ -352,8 +386,9 @@
+                 case 4: cycleScanline(); break;
+                 case 5: showScreenPositionDialog(); break;
+                 case 6: showControlLayoutDialog(); break;
+-                case 7: confirmCloseGame(); break;
+-                case 8: confirmExitApp(); break;
++                case 7: showDiagnosticsDialog(); break;
++                case 8: confirmCloseGame(); break;
++                case 9: confirmExitApp(); break;
+             }
+         });
+     }
+@@ -600,6 +635,7 @@
+                     speedIndex = which;
+                     prefs.edit().putInt("speed_index", speedIndex).apply();
+                     gameSurface.setSpeedMultiplier(SPEEDS[speedIndex]);
++                    DiagnosticLog.append(this, "speed=" + labels[which] + " rom=" + safeRomId());
+                     Toast.makeText(this, "Speed: " + labels[which], Toast.LENGTH_SHORT).show();
+                     dialog.dismiss();
+                 })
+@@ -647,6 +683,7 @@
+     private void closeCurrentGame() {
+         if (!gameLoaded) return;
+         saveCurrentGame();
++        DiagnosticLog.append(this, "close game rom=" + safeRomId() + " frame=" + gameSurface.getFrameCount());
+         gameSurface.pauseLoop();
+         NativeBridge.unloadGame();
+         gameLoaded = false;
+@@ -670,6 +707,7 @@
+ 
+     private void exitAppNow() {
+         saveCurrentGame();
++        markNormalShutdown("exit app");
+         if (gameLoaded) {
+             gameSurface.pauseLoop();
+             NativeBridge.unloadGame();
+@@ -797,6 +835,10 @@
+     @SuppressWarnings("deprecation")
+     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+         super.onActivityResult(requestCode, resultCode, data);
++        if (requestCode == EXPORT_DIAGNOSTIC) {
++            if (resultCode == RESULT_OK && data != null && data.getData() != null) writeDiagnosticReport(data.getData());
++            return;
++        }
+         if (requestCode != PICK_ROM || resultCode != RESULT_OK || data == null) return;
+         Uri uri = data.getData();
+         if (uri == null) return;
+@@ -996,6 +1038,7 @@
+ 
+     private void loadRom(byte[] rom, String displayName) throws Exception {
+         saveCurrentGame();
++        DiagnosticLog.append(this, "rom load begin previous=" + safeRomId());
+         gameSurface.pauseLoop();
+         if (gameLoaded) NativeBridge.unloadGame();
+         gameLoaded = false;
+@@ -1005,6 +1048,7 @@
+         }
+ 
+         currentRomId = sha256Short(rom);
++        DiagnosticLog.append(this, "rom accepted id=" + currentRomId + " bytes=" + rom.length);
+         restoreSave(currentRomId);
+         gameLoaded = true;
+         gameSurface.setGameLoaded(true);
+@@ -1065,8 +1109,10 @@
+                 try (FileOutputStream out = new FileOutputStream(file)) { out.write(state); }
+                 tmp.delete();
+             }
++            DiagnosticLog.append(this, "quick save ok rom=" + safeRomId() + " bytes=" + state.length);
+             Toast.makeText(this, "Quick save complete", Toast.LENGTH_SHORT).show();
+         } catch (Exception e) {
++            DiagnosticLog.append(this, "quick save failed rom=" + safeRomId() + " type=" + e.getClass().getSimpleName());
+             Toast.makeText(this, "Quick save failed", Toast.LENGTH_SHORT).show();
+         } finally {
+             gameSurface.resumeLoop();
+@@ -1092,8 +1138,10 @@
+             if (off != data.length || !NativeBridge.setSaveState(data)) {
+                 throw new IllegalStateException("Load state failed");
+             }
++            DiagnosticLog.append(this, "quick load ok rom=" + safeRomId() + " bytes=" + data.length);
+             Toast.makeText(this, "Quick save loaded", Toast.LENGTH_SHORT).show();
+         } catch (Exception e) {
++            DiagnosticLog.append(this, "quick load failed rom=" + safeRomId() + " type=" + e.getClass().getSimpleName());
+             Toast.makeText(this, "Quick load failed", Toast.LENGTH_SHORT).show();
+         } finally {
+             gameSurface.resumeLoop();
+@@ -1136,6 +1184,7 @@
+     @Override
+     protected void onPause() {
+         super.onPause();
++        DiagnosticLog.append(this, "activity pause rom=" + safeRomId() + " frame=" + gameSurface.getFrameCount());
+         gameSurface.pauseLoop();
+         saveCurrentGame();
+     }
+@@ -1143,6 +1192,7 @@
+     @Override
+     protected void onResume() {
+         super.onResume();
++        DiagnosticLog.append(this, "activity resume rom=" + safeRomId());
+         if (gameLoaded) {
+             gameSurface.resumeLoop();
+             applyImmersive(true);
+@@ -1152,12 +1202,71 @@
+     @Override
+     protected void onDestroy() {
+         saveCurrentGame();
++        diagnosticHandler.removeCallbacks(diagnosticHeartbeat);
++        if (normalShutdown || isFinishing()) {
++            prefs.edit().putBoolean("diagnostic_session_active", false).apply();
++            DiagnosticLog.append(this, "session end normal");
++        } else {
++            DiagnosticLog.append(this, "activity destroyed without explicit exit");
++        }
+         gameSurface.setGameLoaded(false);
+         if (gameLoaded) NativeBridge.unloadGame();
+         NativeBridge.unloadCore();
+         super.onDestroy();
+     }
+ 
++    private void showDiagnosticsDialog() {
++        final String[] items = {"EXPORT REPORT", "CLEAR LOCAL LOG"};
++        showLineMenu("Diagnostics", items, 99, which -> {
++            if (which == 0) exportDiagnosticReport();
++            else confirmClearDiagnostics();
++        });
++    }
++
++    private void exportDiagnosticReport() {
++        DiagnosticLog.append(this, "diagnostic export requested");
++        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
++        intent.addCategory(Intent.CATEGORY_OPENABLE);
++        intent.setType("text/plain");
++        intent.putExtra(Intent.EXTRA_TITLE, "GBA-PocketFrame-diagnostic.txt");
++        startActivityForResult(intent, EXPORT_DIAGNOSTIC);
++    }
++
++    private void writeDiagnosticReport(Uri uri) {
++        try (java.io.OutputStream out = getContentResolver().openOutputStream(uri)) {
++            if (out == null) throw new IOException("Cannot create diagnostic report");
++            out.write(DiagnosticLog.report(this).getBytes(java.nio.charset.StandardCharsets.UTF_8));
++            Toast.makeText(this, "Diagnostic report exported", Toast.LENGTH_SHORT).show();
++        } catch (Exception e) {
++            Toast.makeText(this, "Diagnostic export failed", Toast.LENGTH_SHORT).show();
++        }
++    }
++
++    private void confirmClearDiagnostics() {
++        new AlertDialog.Builder(this)
++                .setTitle("Clear Diagnostics")
++                .setMessage("Delete the local diagnostic event log? Game saves are not affected.")
++                .setPositiveButton("CLEAR", (d, w) -> {
++                    DiagnosticLog.clear(this);
++                    DiagnosticLog.append(this, "diagnostic log cleared");
++                    Toast.makeText(this, "Diagnostic log cleared", Toast.LENGTH_SHORT).show();
++                })
++                .setNegativeButton("CANCEL", null)
++                .show();
++    }
++
++    private String safeRomId() { return currentRomId == null ? "none" : currentRomId; }
++
++    private String orientationName() {
++        return getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait";
++    }
++
++    private void markNormalShutdown(String reason) {
++        normalShutdown = true;
++        prefs.edit().putBoolean("diagnostic_session_active", false).apply();
++        DiagnosticLog.append(this, reason + " rom=" + safeRomId() + " frame=" + gameSurface.getFrameCount());
++    }
++
+     @Override
+     public boolean dispatchKeyEvent(KeyEvent event) {
+         int bit = bitForKey(event.getKeyCode());
