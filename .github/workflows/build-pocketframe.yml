@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
       ANDROID_HOME: /usr/local/lib/android/sdk
@@ -32,12 +32,26 @@ jobs:
           grep -q "versionName '0.5.0-rc5'" GBA-PocketFrame-1.0.0/app/build.gradle
           grep -q 'ApplicationExitInfo' GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/Diagnostics.java
 
+      - name: Fetch exact mGBA source
+        shell: bash
+        working-directory: GBA-PocketFrame-1.0.0
+        run: |
+          chmod +x scripts/fetch_mgba.sh
+          scripts/fetch_mgba.sh
+          test -s third_party/mgba/LICENSE
+          test -s third_party/mgba/src/third-party/blip_buf/license.txt
+          test "$(git -C third_party/mgba rev-parse HEAD)" = "26b7884bc25a5933960f3cdcd98bac1ae14d42e2"
+
       - name: Prepare 1.0 release compliance
         shell: bash
         run: |
           ROOT="GBA-PocketFrame-1.0.0"
+          # Keep the Java namespace: native JNI symbols target com.pocketframe.app.NativeBridge.
+          sed -i "s/applicationId 'com.pocketframe.app'/applicationId 'com.gbapocketframe.app'/" "$ROOT/app/build.gradle"
           sed -i "s/versionCode 13/versionCode 100/" "$ROOT/app/build.gradle"
           sed -i "s/versionName '0.5.0-rc5'/versionName '1.0.0'/" "$ROOT/app/build.gradle"
+          grep -q "implementation 'org.tukaani:xz:1.10'" "$ROOT/app/build.gradle"
+          sed -i "s/implementation 'org.tukaani:xz:1.10'/implementation 'org.tukaani:xz:1.12'/" "$ROOT/app/build.gradle"
           sed -i 's/GBA PocketFrame RC5/GBA PocketFrame 1.0/g' "$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
           sed -i 's/0.5.0-rc5/1.0.0/g' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
 
@@ -110,7 +124,28 @@ jobs:
           )
           if needle2 not in s:
               raise SystemExit("license dialog insertion point not found")
-          p.write_text(s.replace(needle2, method, 1))
+          s = s.replace(needle2, method, 1)
+
+          old_privacy = "ROM filenames, ROM contents, save contents, and controller input are not recorded."
+          new_privacy = (
+              "Routine diagnostic events do not include ROM filenames, ROM contents, save contents, "
+              "or controller button presses. Error and Android process-exit messages may contain "
+              "filenames, paths, or other details. Review a diagnostic report before sharing it."
+          )
+          if old_privacy not in s:
+              raise SystemExit("in-app privacy statement not found")
+          p.write_text(s.replace(old_privacy, new_privacy, 1))
+
+          report_path = Path("GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/Diagnostics.java")
+          report = report_path.read_text()
+          old_report = "ROM filenames and save contents: not recorded"
+          new_report = (
+              "Routine events omit ROM filenames and save contents; error/exit descriptions "
+              "may contain file details. Review before sharing."
+          )
+          if old_report not in report:
+              raise SystemExit("diagnostic report statement not found")
+          report_path.write_text(report.replace(old_report, new_report, 1))
           PY
 
           mkdir -p "$ROOT/app/src/main/assets"
@@ -138,16 +173,31 @@ jobs:
           NOTICE: This product includes software developed at The Apache Software Foundation.
           Source: https://github.com/apache/commons-compress/tree/rel/commons-compress-1.28.0
 
-          XZ for Java 1.10
+          Apache Commons Codec 1.19.0
+          Copyright 2002-2025 The Apache Software Foundation
+          License: Apache License 2.0
+          NOTICE: This product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          Apache Commons IO 2.20.0
+          Copyright 2002-2025 The Apache Software Foundation
+          License: Apache License 2.0
+          NOTICE: This product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          Apache Commons Lang 3.18.0
+          Copyright 2001-2025 The Apache Software Foundation
+          License: Apache License 2.0
+          NOTICE: This product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          XZ for Java 1.12
           Copyright © The XZ for Java authors and contributors
           License: BSD Zero Clause License (0BSD)
           Source: https://github.com/tukaani-project/xz-java
 
           ===== Mozilla Public License 2.0 =====
           EOF
-          cat /usr/share/common-licenses/MPL-2.0 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          cat "$ROOT/third_party/mgba/LICENSE" >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
           printf '\n===== GNU Lesser General Public License 2.1 =====\n' >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
-          cat /usr/share/common-licenses/LGPL-2.1 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
+          cat "$ROOT/third_party/mgba/src/third-party/blip_buf/license.txt" >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
           printf '\n===== Apache License 2.0 =====\n' >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
           cat /usr/share/common-licenses/Apache-2.0 >> "$ROOT/app/src/main/assets/open_source_licenses.txt"
           cat >> "$ROOT/app/src/main/assets/open_source_licenses.txt" <<'EOF'
@@ -180,7 +230,19 @@ jobs:
           - License: Apache-2.0
           - NOTICE: Copyright 2002–2025 The Apache Software Foundation; this product includes software developed at The Apache Software Foundation.
 
-          ## XZ for Java 1.10
+          ## Apache Commons Codec 1.19.0
+          - License: Apache-2.0
+          - NOTICE: Copyright 2002-2025 The Apache Software Foundation; this product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          ## Apache Commons IO 2.20.0
+          - License: Apache-2.0
+          - NOTICE: Copyright 2002-2025 The Apache Software Foundation; this product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          ## Apache Commons Lang 3.18.0
+          - License: Apache-2.0
+          - NOTICE: Copyright 2001-2025 The Apache Software Foundation; this product includes software developed at The Apache Software Foundation (https://www.apache.org/).
+
+          ## XZ for Java 1.12
           - License: 0BSD
 
           Full license texts are included in the app's Open Source Licenses screen.
@@ -192,13 +254,17 @@ jobs:
         run: |
           ROOT="GBA-PocketFrame-1.0.0"
           MAIN="$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
+          grep -q "applicationId 'com.gbapocketframe.app'" "$ROOT/app/build.gradle"
           grep -q "versionCode 100" "$ROOT/app/build.gradle"
           grep -q "versionName '1.0.0'" "$ROOT/app/build.gradle"
+          grep -q "implementation 'org.tukaani:xz:1.12'" "$ROOT/app/build.gradle"
           grep -q '<string name="app_name">GBA PocketFrame</string>' "$ROOT/app/src/main/res/values/strings.xml"
           grep -q 'OPEN SOURCE LICENSES' "$MAIN"
           grep -q 'showOpenSourceLicenses' "$MAIN"
           grep -q 'DIAGNOSTICS' "$MAIN"
           grep -q 'ApplicationExitInfo' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
+          grep -q 'Error and Android process-exit messages may contain' "$MAIN"
+          grep -q 'error/exit descriptions may contain file details' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
           grep -q 'android:allowBackup="false"' "$ROOT/app/src/main/AndroidManifest.xml"
           grep -q 'blip-buf' "$ROOT/THIRD_PARTY_NOTICES.md"
           test -s "$ROOT/app/src/main/assets/open_source_licenses.txt"
@@ -218,15 +284,12 @@ jobs:
         shell: bash
         run: |
           SDKMANAGER="$(find "$ANDROID_SDK_ROOT/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
 
       - name: Build mGBA core
         shell: bash
         working-directory: GBA-PocketFrame-1.0.0
         run: |
-          chmod +x scripts/fetch_mgba.sh
-          scripts/fetch_mgba.sh
           NDK="$ANDROID_SDK_ROOT/ndk/28.2.13676358"
           BUILD="$PWD/build/mgba-arm64-v8a"
           OUT="$PWD/app/src/main/jniLibs/arm64-v8a"
@@ -244,6 +307,18 @@ jobs:
         shell: bash
         working-directory: GBA-PocketFrame-1.0.0
         run: |
+          gradle :app:dependencies --configuration releaseRuntimeClasspath > "$RUNNER_TEMP/pocketframe-runtime-dependencies.txt"
+          for module in \
+            "org.apache.commons:commons-compress:1.28.0" \
+            "commons-codec:commons-codec:1.19.0" \
+            "commons-io:commons-io:2.20.0" \
+            "org.apache.commons:commons-lang3:3.18.0" \
+            "org.tukaani:xz:1.12"; do
+            grep -Fq "$module" "$RUNNER_TEMP/pocketframe-runtime-dependencies.txt" || {
+              echo "Missing or changed runtime dependency: $module" >&2
+              exit 1
+            }
+          done
           APK="app/build/outputs/apk/debug/app-debug.apk"
           AAB="app/build/outputs/bundle/release/app-release.aab"
           test -s "$APK"
@@ -254,6 +329,7 @@ jobs:
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
           unzip -l "$APK" | grep -q 'assets/open_source_licenses.txt'
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "package: name='com.gbapocketframe.app'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='1.0.0'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionCode='100'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
