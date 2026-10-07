@@ -1,4 +1,4 @@
-name: Build GBA PocketFrame 0.5.0 RC4 APK
+name: Build GBA PocketFrame 0.5.0 RC5 APK
 
 on:
   push:
@@ -28,14 +28,16 @@ jobs:
           test -f GBA-PocketFrame-1.0.0/app/build.gradle
           base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
           patch -p0 < rc4.patch
+          base64 -d staging/rc5_patch.b64 | gzip -d > rc5.patch
+          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../rc5.patch)
 
-      - name: RC4 UI and control checks
+      - name: RC5 stability and diagnostics checks
         shell: bash
         run: |
           ROOT="GBA-PocketFrame-1.0.0"
           MAIN="$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
           SURFACE="$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
-          grep -q "versionName '0.5.0-rc4'" "$ROOT/app/build.gradle"
+          grep -q "versionName '0.5.0-rc5'" "$ROOT/app/build.gradle"
           grep -q '<string name="app_name">GBA PocketFrame</string>' "$ROOT/app/src/main/res/values/strings.xml"
           grep -q 'setMenuListener(this::showGameMenu)' "$MAIN"
           grep -q '"MENU"' "$SURFACE"
@@ -113,7 +115,7 @@ jobs:
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libmgba_libretro.so'
           unzip -l "$APK" | grep -q 'lib/arm64-v8a/libpocketframe_jni.so'
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "targetSdkVersion:'36'"
-          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.5.0-rc4'"
+          "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "versionName='0.5.0-rc5'"
           "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump badging "$APK" | grep -q "application-label:'GBA PocketFrame'"
           if "$ANDROID_SDK_ROOT/build-tools/36.0.0/aapt" dump permissions "$APK" | grep -q 'android.permission.INTERNET'; then
             echo "Unexpected INTERNET permission" >&2
@@ -124,6 +126,6 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GBA-PocketFrame-0.5.0-rc4-debug-apk
+          name: GBA-PocketFrame-0.5.0-rc5-debug-apk
           path: GBA-PocketFrame-1.0.0/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
