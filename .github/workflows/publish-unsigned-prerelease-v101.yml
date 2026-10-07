@@ -1,0 +1,38 @@
+name: Publish PocketFrame 1.0.1 unsigned AAB for local signing
+
+on:
+  push:
+    branches: [pocketframe-ui-v101]
+    paths: [.github/workflows/publish-unsigned-prerelease-v101.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the successful 1.0.1 build artifact
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 37629634743
+          name: GBA-PocketFrame-1.0.1-ui-unsigned-aab
+          github-token: ${{ github.token }}
+          path: unsigned-aab
+
+      - name: Validate and publish a public prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          AAB="unsigned-aab/app-release.aab"
+          test -s "$AAB"
+          unzip -t "$AAB" >/dev/null
+          gh release create pocketframe-1.0.1-unsigned-candidate1 "$AAB#GBA-PocketFrame-1.0.1-unsigned.aab" \
+            --target pocketframe-ui-v101 \
+            --title "GBA PocketFrame 1.0.1 unsigned build for local signing" \
+            --notes "Unsigned app bundle from successful Actions run 37629634743. Not installable as a Play release. The developer must sign it locally with the existing upload key." \
+            --prerelease \
+            --latest=false
