@@ -1,0 +1,33 @@
+name: Export exact GBA PocketFrame RC5 source
+
+on:
+  push:
+    branches:
+      - pocketframe-build
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct exact successful RC5 source
+        shell: bash
+        run: |
+          cat staging/rc3src_aa staging/rc3src_ab staging/rc3src_ac staging/rc3src_ad staging/rc3src_ae > rc3src.b64
+          base64 -d rc3src.b64 > rc3src.tar.gz
+          tar -xzf rc3src.tar.gz
+          rm -f GBA-PocketFrame-1.0.0/app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp.b64
+          base64 -d staging/rc4_patch.b64 | gzip -d > rc4.patch
+          patch -p0 < rc4.patch
+          cat staging/rc5p_00 staging/rc5p_01 staging/rc5p_02 staging/rc5p_03 staging/rc5p_04 > rc5_patch.b64
+          base64 -d rc5_patch.b64 | gzip -d > rc5.patch
+          (cd GBA-PocketFrame-1.0.0 && patch -p1 < ../rc5.patch)
+          grep -q "versionName '0.5.0-rc5'" GBA-PocketFrame-1.0.0/app/build.gradle
+          grep -q 'ApplicationExitInfo' GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/Diagnostics.java
+          zip -qr GBA-PocketFrame-0.5.0-rc5-exact-source.zip GBA-PocketFrame-1.0.0
+      - name: Upload exact source
+        uses: actions/upload-artifact@v4
+        with:
+          name: GBA-PocketFrame-0.5.0-rc5-exact-source
+          path: GBA-PocketFrame-0.5.0-rc5-exact-source.zip
+          if-no-files-found: error
