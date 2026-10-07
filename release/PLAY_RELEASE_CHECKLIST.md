@@ -1,9 +1,9 @@
 # GBA PocketFrame 1.0.0 — Google Play Release Checklist
 
 ## Build / package
-- Package: `com.pocketframe.app`
+- Package: `com.gbapocketframe.app`
 - Version: `1.0.0`
-- Version code: `20`
+- Version code: `100`
 - Target SDK: 36
 - Architecture: arm64-v8a
 - No `INTERNET` permission
@@ -28,7 +28,7 @@
 - Do not use Nintendo logos, copyrighted characters, bundled commercial screenshots, or proprietary game assets.
 
 ## Testing
-- Install 1.0 candidate over the previous package and verify saves remain accessible.
+- Install the new package and verify a fresh start. Android keeps its saves separate from the previous `com.pocketframe.app` installation.
 - GB, GBC, GBA smoke tests.
 - ZIP and 7z ROM loading.
 - Native SRAM save + restart + reload.
