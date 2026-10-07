@@ -31,7 +31,7 @@ ZIP/7z archives are decoded by the Android frontend.
 - Apache Commons Codec 1.19.0 — Apache-2.0
 - Apache Commons IO 2.20.0 — Apache-2.0
 - Apache Commons Lang 3.18.0 — Apache-2.0
-- XZ for Java 1.10 — 0BSD
+- XZ for Java 1.12 — 0BSD
 
 ## Distribution actions
 
