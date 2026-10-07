@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/build-pocketframe-ui-v101.yml
       - staging/ui-display-v101.patch
+      - staging/ui-display-v101-safety.patch
 
 permissions:
   actions: read
@@ -42,11 +43,13 @@ jobs:
           grep -q "versionName '1.0.0'" "$ROOT/app/build.gradle"
           grep -q 'OPEN SOURCE LICENSES' "$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
           (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-display-v101.patch)
+          (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-display-v101-safety.patch)
           sed -i "s/versionCode 100/versionCode 101/" "$ROOT/app/build.gradle"
           sed -i "s/versionName '1.0.0'/versionName '1.0.1'/" "$ROOT/app/build.gradle"
           sed -i 's/1.0.0/1.0.1/g' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
           grep -q 'VIDEO_PIXEL_1X' "$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
           grep -q 'UI TRANSPARENCY' "$ROOT/app/src/main/java/com/pocketframe/app/MainActivity.java"
+          grep -q 'saveLayerAlpha' "$ROOT/app/src/main/java/com/pocketframe/app/GameSurface.java"
           grep -q "versionCode 101" "$ROOT/app/build.gradle"
 
       - name: Set up Java 21
