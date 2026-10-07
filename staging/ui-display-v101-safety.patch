@@ -1,0 +1,54 @@
+--- a/app/src/main/java/com/pocketframe/app/GameSurface.java
++++ b/app/src/main/java/com/pocketframe/app/GameSurface.java
+@@ -512,18 +512,23 @@
+         float actionHitRadius = H * 0.108f * landscapeLayout.actionScale;
+         leftBound = Math.max(leftBound, dpadCenter + dpadHitRadius + dp(8));
+         rightBound = Math.min(rightBound, bCenter - actionHitRadius - dp(8));
+-        rightBound = Math.max(leftBound + 1f, rightBound);
++        // Saved control layouts can move both side groups toward the centre.
++        // Keep a usable video area even when the touch areas cannot all be clear.
++        leftBound = Math.min(leftBound, W * 0.40f);
++        rightBound = Math.max(rightBound, W * 0.60f);
+ 
+         // The quick bar is a separate Android view. Its measured bottom is supplied by
+         // MainActivity, so the video never sits under the top row on dense displays.
+         float topBound = Math.max(H * 0.095f, Math.max(dp(50), topControlInsetPx + dp(8)));
+-        topBound = Math.min(topBound, H - dp(40));
++        topBound = Math.min(topBound, H * 0.60f);
+         RectF menu = landscapeSystemHitRect(0, W, H, landscapeLayout);
+         RectF select = landscapeSystemHitRect(1, W, H, landscapeLayout);
+         RectF start = landscapeSystemHitRect(2, W, H, landscapeLayout);
+         float controlsTop = Math.min(menu.top, Math.min(select.top, start.top));
+         float bottomBound = Math.min(H * 0.86f, controlsTop - dp(10));
+-        bottomBound = Math.max(topBound + 1f, bottomBound);
++        // A custom bottom-row offset may leave no clear vertical gap. In that
++        // case prefer a visible game viewport over collapsing it to a line.
++        bottomBound = Math.max(topBound + H * 0.20f, bottomBound);
+         return new RectF(leftBound, topBound, rightBound, bottomBound);
+     }
+ 
+@@ -685,6 +690,13 @@
+         float arm = size * 0.34f;
+         float half = size * 0.5f;
+         float radius = size * 0.10f;
++        int savedAlpha = controlsDrawAlpha;
++        int layer = -1;
++        if (savedAlpha < 255) {
++            float edge = half + dp(4);
++            layer = c.saveLayerAlpha(cx - edge, cy - edge, cx + edge, cy + edge, savedAlpha);
++            controlsDrawAlpha = 255;
++        }
+ 
+         controlPaint.setColor(CONTROL_FILL);
+         controlPaint.setAlpha(controlsDrawAlpha);
+@@ -700,6 +712,10 @@
+         drawDirectionMarker(c, cx, cy + size * 0.34f, markerR, (active & DOWN) != 0);
+         drawDirectionMarker(c, cx - size * 0.34f, cy, markerR, (active & LEFT) != 0);
+         drawDirectionMarker(c, cx + size * 0.34f, cy, markerR, (active & RIGHT) != 0);
++        if (layer != -1) {
++            c.restoreToCount(layer);
++            controlsDrawAlpha = savedAlpha;
++        }
+     }
+ 
+     private void drawDirectionMarker(Canvas c, float x, float y, float r, boolean pressed) {
