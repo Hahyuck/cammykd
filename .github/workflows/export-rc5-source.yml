@@ -1,9 +1,6 @@
-name: Export exact GBA PocketFrame 1.0 source
+name: Legacy source export (old package)
 
 on:
-  push:
-    branches:
-      - pocketframe-build
   workflow_dispatch:
 
 jobs:
