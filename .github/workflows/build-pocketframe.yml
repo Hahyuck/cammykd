@@ -43,65 +43,74 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/MainActivity.java")
-          s=p.read_text()
-          s=s.replace("import android.widget.LinearLayout;\nimport android.widget.TextView;",
-                      "import android.widget.LinearLayout;\nimport android.widget.ScrollView;\nimport android.widget.TextView;")
-          needle="""        privacyLp.topMargin = dp(10);
-        welcomeCard.addView(privacy, privacyLp);
+          p = Path("GBA-PocketFrame-1.0.0/app/src/main/java/com/pocketframe/app/MainActivity.java")
+          s = p.read_text()
 
-        root.addView(welcomeCard);"""
-          repl="""        privacyLp.topMargin = dp(10);
-        welcomeCard.addView(privacy, privacyLp);
+          s = s.replace(
+              "import android.widget.LinearLayout;\nimport android.widget.TextView;",
+              "import android.widget.LinearLayout;\nimport android.widget.ScrollView;\nimport android.widget.TextView;"
+          )
 
-        TextView licenses = capsule("OPEN SOURCE LICENSES", Color.rgb(34, 39, 47), TEXT, true);
-        licenses.setTextSize(11);
-        licenses.setOnClickListener(v -> showOpenSourceLicenses());
-        LinearLayout.LayoutParams licenseLp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));
-        licenseLp.topMargin = dp(8);
-        welcomeCard.addView(licenses, licenseLp);
-
-        root.addView(welcomeCard);"""
+          needle = (
+              "        privacyLp.topMargin = dp(10);\n"
+              "        welcomeCard.addView(privacy, privacyLp);\n\n"
+              "        root.addView(welcomeCard);"
+          )
+          repl = (
+              "        privacyLp.topMargin = dp(10);\n"
+              "        welcomeCard.addView(privacy, privacyLp);\n\n"
+              "        TextView licenses = capsule(\"OPEN SOURCE LICENSES\", Color.rgb(34, 39, 47), TEXT, true);\n"
+              "        licenses.setTextSize(11);\n"
+              "        licenses.setOnClickListener(v -> showOpenSourceLicenses());\n"
+              "        LinearLayout.LayoutParams licenseLp = new LinearLayout.LayoutParams(\n"
+              "                LinearLayout.LayoutParams.MATCH_PARENT, dp(44));\n"
+              "        licenseLp.topMargin = dp(8);\n"
+              "        welcomeCard.addView(licenses, licenseLp);\n\n"
+              "        root.addView(welcomeCard);"
+          )
           if needle not in s:
               raise SystemExit("license button insertion point not found")
-          s=s.replace(needle,repl)
-          needle2="""    private interface LineMenuAction {
-              void onItem(int which);
-          }"""
-          method="""    private void showOpenSourceLicenses() {
-              String text;
-              try (java.io.InputStream in = getAssets().open("open_source_licenses.txt");
-                   java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
-                  byte[] buffer = new byte[8192];
-                  int n;
-                  while ((n = in.read(buffer)) >= 0) if (n > 0) out.write(buffer, 0, n);
-                  text = out.toString(java.nio.charset.StandardCharsets.UTF_8.name());
-              } catch (Exception e) {
-                  text = "Open-source license information could not be loaded.";
-              }
-              TextView body = new TextView(this);
-              body.setText(text);
-              body.setTextColor(TEXT);
-              body.setTextSize(11f);
-              body.setPadding(dp(18), dp(8), dp(18), dp(18));
-              body.setTextIsSelectable(true);
-              ScrollView scroll = new ScrollView(this);
-              scroll.addView(body, new ScrollView.LayoutParams(
-                      ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
-              new AlertDialog.Builder(this)
-                      .setTitle("Open Source Licenses")
-                      .setView(scroll)
-                      .setPositiveButton("OK", null)
-                      .show();
-          }
+          s = s.replace(needle, repl, 1)
 
-          private interface LineMenuAction {
-              void onItem(int which);
-          }"""
+          needle2 = (
+              "    private interface LineMenuAction {\n"
+              "        void onItem(int which);\n"
+              "    }"
+          )
+          method = (
+              "    private void showOpenSourceLicenses() {\n"
+              "        String text;\n"
+              "        try (java.io.InputStream in = getAssets().open(\"open_source_licenses.txt\");\n"
+              "             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {\n"
+              "            byte[] buffer = new byte[8192];\n"
+              "            int n;\n"
+              "            while ((n = in.read(buffer)) >= 0) if (n > 0) out.write(buffer, 0, n);\n"
+              "            text = out.toString(java.nio.charset.StandardCharsets.UTF_8.name());\n"
+              "        } catch (Exception e) {\n"
+              "            text = \"Open-source license information could not be loaded.\";\n"
+              "        }\n"
+              "        TextView body = new TextView(this);\n"
+              "        body.setText(text);\n"
+              "        body.setTextColor(TEXT);\n"
+              "        body.setTextSize(11f);\n"
+              "        body.setPadding(dp(18), dp(8), dp(18), dp(18));\n"
+              "        body.setTextIsSelectable(true);\n"
+              "        ScrollView scroll = new ScrollView(this);\n"
+              "        scroll.addView(body, new ScrollView.LayoutParams(\n"
+              "                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));\n"
+              "        new AlertDialog.Builder(this)\n"
+              "                .setTitle(\"Open Source Licenses\")\n"
+              "                .setView(scroll)\n"
+              "                .setPositiveButton(\"OK\", null)\n"
+              "                .show();\n"
+              "    }\n\n"
+              "    private interface LineMenuAction {\n"
+              "        void onItem(int which);\n"
+              "    }"
+          )
           if needle2 not in s:
               raise SystemExit("license dialog insertion point not found")
-          p.write_text(s.replace(needle2,method))
+          p.write_text(s.replace(needle2, method, 1))
           PY
 
           mkdir -p "$ROOT/app/src/main/assets"
