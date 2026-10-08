@@ -1,0 +1,216 @@
+--- a/app/src/main/java/com/pocketframe/app/MainActivity.java
++++ b/app/src/main/java/com/pocketframe/app/MainActivity.java
+@@ -9,20 +9,24 @@
+ import android.content.res.Configuration;
+ import android.database.Cursor;
+ import android.graphics.Color;
++import android.graphics.Insets;
+ import android.graphics.Rect;
+ import android.graphics.Typeface;
+ import android.graphics.drawable.GradientDrawable;
+ import android.graphics.drawable.ColorDrawable;
+ import android.net.Uri;
+ import android.os.Bundle;
++import android.os.Build;
+ import android.os.ParcelFileDescriptor;
+ import android.provider.OpenableColumns;
+ import android.view.Gravity;
++import android.view.DisplayCutout;
+ import android.view.InputDevice;
+ import android.view.KeyEvent;
+ import android.view.MotionEvent;
+ import android.view.Window;
+ import android.view.WindowManager;
++import android.view.WindowInsets;
+ import android.view.View;
+ import android.view.ViewGroup;
+ import android.widget.FrameLayout;
+@@ -74,6 +78,7 @@
+     private TextView statusText;
+     private TextView openButton;
+     private TextView scanButton;
++    private TextView landscapeMenuButton;
+     private static final float[] SPEEDS = {1.0f, 1.5f, 2.0f, 3.0f};
+     private int speedIndex;
+     private SharedPreferences prefs;
+@@ -90,6 +95,8 @@
+         setTitle(appTitle());
+         getWindow().setStatusBarColor(BG);
+         getWindow().setNavigationBarColor(BG);
++        if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
++        applyImmersive(false);
+ 
+         prefs = getSharedPreferences("pocketframe", MODE_PRIVATE);
+         previousUnexpectedExit = Diagnostics.initialize(this);
+@@ -108,8 +115,11 @@
+         buildHeader();
+         buildQuickBar();
+         buildWelcomeCard();
++        installSafeAreaInsets();
+         gameSurface.setMenuListener(this::showGameMenu);
+         gameSurface.setDiagnosticListener(frame -> Diagnostics.event(this, "CHECKPOINT", diagnosticState(frame)));
++        gameSurface.addOnLayoutChangeListener((v, left, top, right, bottom,
++                                              oldLeft, oldTop, oldRight, oldBottom) -> refreshGameOverlayLayout());
+         root.addOnLayoutChangeListener((v, left, top, right, bottom,
+                                        oldLeft, oldTop, oldRight, oldBottom) -> {
+             if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop) {
+@@ -118,6 +128,7 @@
+         });
+         applyLayoutForOrientation();
+         setContentView(root);
++        root.requestApplyInsets();
+ 
+         gameSurface.setStatusListener(this::setStatus);
+ 
+@@ -184,6 +195,10 @@
+         quickBar.setBackgroundColor(Color.TRANSPARENT);
+         quickBar.setVisibility(View.GONE);
+ 
++        landscapeMenuButton = miniButton("MENU");
++        landscapeMenuButton.setVisibility(View.GONE);
++        landscapeMenuButton.setOnClickListener(v -> showGameMenu());
++
+         TextView up = miniButton("▲");
+         up.setOnClickListener(v -> gameSurface.nudgeVideoOffset(-8));
+         up.setOnLongClickListener(v -> { gameSurface.resetVideoOffset(); Toast.makeText(this, "Screen centered", Toast.LENGTH_SHORT).show(); return true; });
+@@ -201,6 +216,7 @@
+         TextView load = miniButton("LOAD");
+         load.setOnClickListener(v -> quickLoadState());
+ 
++        addQuickButton(landscapeMenuButton);
+         addQuickButton(up);
+         addQuickButton(down);
+         addQuickButton(scanButton);
+@@ -463,7 +479,8 @@
+         panel.addView(scroller, new LinearLayout.LayoutParams(
+                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+ 
+-        AlertDialog dialog = new AlertDialog.Builder(this).setView(panel, 0, 0, 0, 0).create();
++        AlertDialog dialog = new AlertDialog.Builder(this).create();
++        dialog.setView(panel, 0, 0, 0, 0);
+         lineMenuDialog = dialog;
+         dialog.setOnDismissListener(d -> {
+             if (lineMenuDialog == dialog) lineMenuDialog = null;
+@@ -516,10 +533,8 @@
+         if (window == null) return;
+         Rect visibleFrame = new Rect();
+         window.getDecorView().getWindowVisibleDisplayFrame(visibleFrame);
+-        int availableWidth = root.getWidth() > 0 ? root.getWidth()
+-                : getResources().getDisplayMetrics().widthPixels;
+-        int availableHeight = root.getHeight() > 0 ? root.getHeight()
+-                : getResources().getDisplayMetrics().heightPixels;
++        int availableWidth = landscapeViewportWidth();
++        int availableHeight = landscapeViewportHeight();
+         if (visibleFrame.width() > 0) availableWidth = Math.min(availableWidth, visibleFrame.width());
+         if (visibleFrame.height() > 0) availableHeight = Math.min(availableHeight, visibleFrame.height());
+         int width = Math.max(1, Math.min(availableWidth - dp(32), dp(390)));
+@@ -929,8 +944,48 @@
+         return drawable;
+     }
+ 
++    @SuppressWarnings("deprecation")
++    private void installSafeAreaInsets() {
++        root.setOnApplyWindowInsetsListener((view, insets) -> {
++            int left, top, right, bottom;
++            if (Build.VERSION.SDK_INT >= 30) {
++                Insets safe = insets.getInsetsIgnoringVisibility(
++                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
++                left = safe.left;
++                top = safe.top;
++                right = safe.right;
++                bottom = safe.bottom;
++            } else {
++                left = insets.getStableInsetLeft();
++                top = insets.getStableInsetTop();
++                right = insets.getStableInsetRight();
++                bottom = insets.getStableInsetBottom();
++                if (Build.VERSION.SDK_INT >= 28) {
++                    DisplayCutout cutout = insets.getDisplayCutout();
++                    if (cutout != null) {
++                        left = Math.max(left, cutout.getSafeInsetLeft());
++                        top = Math.max(top, cutout.getSafeInsetTop());
++                        right = Math.max(right, cutout.getSafeInsetRight());
++                        bottom = Math.max(bottom, cutout.getSafeInsetBottom());
++                    }
++                }
++            }
++            if (root.getPaddingLeft() != left || root.getPaddingTop() != top
++                    || root.getPaddingRight() != right || root.getPaddingBottom() != bottom) {
++                root.setPadding(left, top, right, bottom);
++                root.requestLayout();
++                root.post(() -> {
++                    applyLayoutForOrientation();
++                    refreshGameOverlayLayout();
++                });
++            }
++            return insets;
++        });
++    }
++
+     private void applyLayoutForOrientation() {
+         boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
++        landscapeMenuButton.setVisibility(landscape ? View.VISIBLE : View.GONE);
+ 
+         FrameLayout.LayoutParams headerLp = new FrameLayout.LayoutParams(
+                 FrameLayout.LayoutParams.MATCH_PARENT,
+@@ -977,14 +1032,20 @@
+     }
+ 
+     private int landscapeToolbarWidth() {
+-        int width = root.getWidth() > 0 ? root.getWidth() : getResources().getDisplayMetrics().widthPixels;
+-        int height = root.getHeight() > 0 ? root.getHeight() : getResources().getDisplayMetrics().heightPixels;
++        int width = landscapeViewportWidth();
++        int height = landscapeViewportHeight();
+         int available = Math.round(width - 2f * LandscapeLayout.railWidth(width, height)) - dp(16);
+         return Math.max(1, Math.min(dp(400), available));
+     }
+ 
++    private int landscapeViewportWidth() {
++        int width = root.getWidth() > 0 ? root.getWidth() : getResources().getDisplayMetrics().widthPixels;
++        return Math.max(1, width - root.getPaddingLeft() - root.getPaddingRight());
++    }
++
+     private int landscapeViewportHeight() {
+-        return root.getHeight() > 0 ? root.getHeight() : getResources().getDisplayMetrics().heightPixels;
++        int height = root.getHeight() > 0 ? root.getHeight() : getResources().getDisplayMetrics().heightPixels;
++        return Math.max(1, height - root.getPaddingTop() - root.getPaddingBottom());
+     }
+ 
+     private int landscapeToolbarHeight() {
+@@ -1006,7 +1067,7 @@
+     private void syncTopControlInset() {
+         boolean landscape = getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+         float inset = landscape && quickBar.getVisibility() == View.VISIBLE
+-                ? quickBar.getBottom() : 0f;
++                ? Math.max(0, quickBar.getBottom() - gameSurface.getTop()) : 0f;
+         gameSurface.setTopControlInsetPx(inset);
+     }
+ 
+@@ -1014,6 +1075,8 @@
+     public void onConfigurationChanged(Configuration newConfig) {
+         super.onConfigurationChanged(newConfig);
+         if (lineMenuDialog != null) lineMenuDialog.dismiss();
++        applyImmersive(gameLoaded);
++        root.requestApplyInsets();
+         applyLayoutForOrientation();
+         gameSurface.requestLayout();
+         gameSurface.invalidate();
+@@ -1030,13 +1093,17 @@
+         header.setVisibility(playing ? View.GONE : View.VISIBLE);
+         quickBar.setVisibility(playing ? View.VISIBLE : View.GONE);
+         applyImmersive(playing);
++        root.requestApplyInsets();
+         quickBar.post(this::refreshGameOverlayLayout);
+     }
+ 
+     @SuppressWarnings("deprecation")
+     private void applyImmersive(boolean immersive) {
+         if (!immersive) {
+-            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
++            getWindow().getDecorView().setSystemUiVisibility(
++                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
++                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
++                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+             return;
+         }
+         getWindow().getDecorView().setSystemUiVisibility(
