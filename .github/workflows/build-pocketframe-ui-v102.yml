@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/build-pocketframe-ui-v102.yml
       - staging/ui-layout-v102.patch
+      - staging/ui-menu-v102-fix.patch
 
 permissions:
   actions: read
@@ -44,6 +45,7 @@ jobs:
           (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-display-v101.patch)
           (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-display-v101-safety.patch)
           (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-layout-v102.patch)
+          (cd "$ROOT" && patch -p1 --batch --forward < ../staging/ui-menu-v102-fix.patch)
           sed -i "s/versionCode 100/versionCode 102/" "$ROOT/app/build.gradle"
           sed -i "s/versionName '1.0.0'/versionName '1.0.2'/" "$ROOT/app/build.gradle"
           sed -i 's/1.0.0/1.0.2/g' "$ROOT/app/src/main/java/com/pocketframe/app/Diagnostics.java"
