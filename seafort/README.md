@@ -4,6 +4,7 @@ A real-time three.js world in a single HTML file: a brick tower and a harbour to
 
 **Play:** https://hahyuck.github.io/cammykd/seafort/
 
+- Touch (phones, tablets): an invisible pad. Left thumb moves, right thumb looks, double-tap returns to the tour.
 - Tour camera runs by itself. `W A S D` + mouse: free camera (`Q`/`E` down/up, `Shift` fast, `R` back to the tour). Click for sound, `M` mutes, `Space` pauses.
 - Needs WebGL2 and a reasonably strong GPU.
 
