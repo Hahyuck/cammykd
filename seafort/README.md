@@ -12,6 +12,7 @@ A real-time three.js world in a single HTML file: a brick tower and a harbour to
 ## Credits
 
 - Sky, clouds, light, water, post-processing and the film engine are from **Crimson Loong** by **ChetasLua** — https://github.com/ChetasLua/crimson-loong. This page is a derivative of that work; all credit for the engine goes to its author.
+- The concept image on the cover (the picture the place started from) is by **@prismofpixels**; the Tripo model was generated from it.
 - three.js, MIT licence (see `vendor/LICENSE`; the copyright banner is kept in the built page).
 - Tower, town, surf, lightning, ambient sound, free camera: DIVIDE01, written with Claude.
 - The wreck islet and buoys are pieces of a Tripo-generated model.
